@@ -196,7 +196,6 @@ class NumericalSymbIntegratorPA(Integrator):
         with ThreadPoolExecutor(max_workers=self.n_workers) as executor:
             future_to_problem = {executor.submit(convert_to_problem_wrapper, problem): problem for problem in problems}
             for future in tqdm.tqdm(as_completed(future_to_problem), total=len(problems), disable=False):
-                problem = future_to_problem[future]
                 try:
                     simplices, coeffs, exponents = future.result()
                     if simplices.shape[0] == 0:
