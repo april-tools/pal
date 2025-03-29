@@ -1,7 +1,7 @@
 # GASP!
 This repository is the implementation of GASP!, the GPU Accelerated Simplical Integrator, as a stand-alone drop-in backend for wmi-pa.
 
-GASP! is a high-performance WMI-integration backend that that can replace LATTE and can achieve one to two magnitude performance improvements.
+GASP! is a high-performance WMI-integration backend that that can replace LATTE and can achieve one to two magnitude performance improvements, even more if many monomials must be integrated separately in parallel.
 
 ![gasp_vs_latte](imgs/scatter.png)
 
