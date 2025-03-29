@@ -7,7 +7,7 @@ import pandas as pd
 
 from wmipa import WMI
 from wmipa.integration import LatteIntegrator, VolestiIntegrator, SymbolicIntegrator
-from wmipa.integration.torch.wmipa.numerical_symb_integrator_pa import NumericalSymbIntegratorPA
+from gasp.torch.wmipa.numerical_symb_integrator_pa import NumericalSymbIntegratorPA
 from .io import check_path_exists
 from .run import get_wmi_id
 

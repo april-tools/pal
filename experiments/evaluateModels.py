@@ -176,6 +176,8 @@ def main():
 
         except Exception as err:
 
+            # raise err
+
             print(f"Exception while solving '{filename}' of type {type(err)}:")
             print(err.args)
             print(err)

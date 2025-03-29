@@ -14,9 +14,9 @@ from wmipa.integration.polytope import Polynomial
 import gasp.torch.wmipa.triangulate_inequalities as triangulate
 from pysmt.shortcuts import LE, LT
 
-# hack for the "RuntimeError: CUDA driver initialization failed." error
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# # hack for the "RuntimeError: CUDA driver initialization failed." error
+# import os
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 class NumericalSymbIntegratorPA(Integrator):
@@ -35,7 +35,11 @@ class NumericalSymbIntegratorPA(Integrator):
         self.variable_map = variable_map
         self.add_to_s = add_to_s
         self.dtype = torch.float64
-        self.prepare_grundmann_moeller()
+        self.gm_points = {}
+        if total_degree < 20:
+            self.device = torch.device("cpu")
+            _ = self.get_gm_points(total_degree)
+        # self.prepare_grundmann_moeller()
         self.device = torch.device("cpu")
         self.sum_seperately = sum_seperately
         self.with_sorting = with_sorting
@@ -45,28 +49,38 @@ class NumericalSymbIntegratorPA(Integrator):
         self.n_workers = n_workers
         super().__init__()
 
-    def prepare_grundmann_moeller(self):
+    def prepare_grundmann_moeller(self, degree):
         """
         Prepares the Grundmann-Moeller quadrature rule for integration over a simplex.
         """
-        total_degree = self.total_degree
+        total_degree = degree
         s = math.ceil((float(total_degree) - 1) / 2)
         s += self.add_to_s
         self.s = s
         assert 2 * s + 1 >= total_degree
         coefficients, points = gm.prepare_grundmann_moeller(s, len(self.variable_map))
-        self.coefficients = torch.tensor(coefficients, dtype=self.dtype)
-        self.points = torch.tensor(points, dtype=self.dtype)
+        coefficients = torch.tensor(coefficients, dtype=self.dtype)
+        points = torch.tensor(points, dtype=self.dtype)
+
+        return (coefficients, points)
 
     def set_device(self, device):
         self.device = device
-        self.coefficients = self.coefficients.to(device)
-        self.points = self.points.to(device)
+        # move the GM points to the device
+        for key in self.gm_points:
+            (c, p) = self.gm_points[key]
+            self.gm_points[key] = (c.to(device), p.to(device))
+        # self.coefficients = self.coefficients.to(device)
+        # self.points = self.points.to(device)
 
     def set_dtype(self, dtype):
         self.dtype = dtype
-        self.coefficients = self.coefficients.to(dtype)
-        self.points = self.points.to(dtype)
+        # move the GM points to the dtype
+        for key in self.gm_points:
+            (c, p) = self.gm_points[key]
+            self.gm_points[key] = (c.to(dtype), p.to(dtype))
+        # self.coefficients = self.coefficients.to(dtype)
+        # self.points = self.points.to(dtype)
 
     def set_batch_size(self, batch_size):
         self.batch_size = batch_size
@@ -103,16 +117,42 @@ class NumericalSymbIntegratorPA(Integrator):
             simplices = torch.tensor(simplices, dtype=self.dtype)
 
             return simplices, coeff, exponents
+        
+    def get_gm_points(self, degree):
+        # self.gm_points is max_degree -> (coefficients, points)
+        # find the smallest key that is larger than degree
+        # keys = np.array(list(self.gm_points.keys()))
+        # valid_keys = keys[keys >= degree]
+        # key = valid_keys.min() if len(valid_keys) > 0 else None
+        # if key is None or key > 2*degree:
+        #     print(f"Gen Key: {key}, Degree: {degree}")
+        #     # if there is no such key, prepare the GM points for the given degree
+        #     (c, p) = self.prepare_grundmann_moeller(degree)
+        #     self.gm_points[degree] = (c.to(self.device), p.to(self.device))
+        #     key = degree
+        # else:
+        #     print(f"Found Key: {key}, Degree: {degree}")
+
+        if degree not in self.gm_points:
+            (c, p) = self.prepare_grundmann_moeller(degree)
+            self.gm_points[degree] = (c.to(self.device), p.to(self.device))
+        key = degree
+
+        (coefficients, points) = self.gm_points[key]
+        return (coefficients, points)
 
     def integrate_simplex(self, simplex, coeffs, exponents):
         if self.monomials_lower_precision:
             f = lambda x: calc_single_polynomial(x.to(torch.float32), coeffs, exponents).to(self.coefficients.dtype)
         else:
             f = lambda x: calc_single_polynomial(x, coeffs, exponents)
+        total_deg = exponents.sum(-1).max().item()
+        gm_coefficients, gm_points = self.get_gm_points(total_deg)
+
         return gm.integrate(
             f,
-            self.coefficients,
-            self.points,
+            gm_coefficients,
+            gm_points,
             simplex,
             sum_seperately=self.sum_seperately,
             with_sorting=self.with_sorting,
@@ -155,7 +195,7 @@ class NumericalSymbIntegratorPA(Integrator):
 
         with ThreadPoolExecutor(max_workers=self.n_workers) as executor:
             future_to_problem = {executor.submit(convert_to_problem_wrapper, problem): problem for problem in problems}
-            for future in tqdm.tqdm(as_completed(future_to_problem), total=len(problems), disable=True):
+            for future in tqdm.tqdm(as_completed(future_to_problem), total=len(problems), disable=False):
                 problem = future_to_problem[future]
                 try:
                     simplices, coeffs, exponents = future.result()
@@ -166,15 +206,30 @@ class NumericalSymbIntegratorPA(Integrator):
                     simplices = simplices.to(self.device)
                     coeffs = coeffs.to(self.device)
                     exponents = exponents.to(self.device)
-                    integral_simplices = torch.vmap(
-                        lambda s: self.integrate_simplex(s, coeffs, exponents)
-                    )(simplices)
-                    integral_polytope = (
-                        torch.sum(integral_simplices, dim=0).to("cpu").unsqueeze(-1)
-                    )
+                    # batch over simplices
+                    results_per_batch = []
+                    s_size = int(self.batch_size / 10)
+                    for i in range(0, simplices.shape[0], s_size):
+                        simplices_batch = simplices[i:i+s_size]
+                        integral_simplices = torch.vmap(
+                            lambda s: self.integrate_simplex(s, coeffs, exponents)
+                        )(simplices_batch)
+                        integral_simplices_batch = (
+                            torch.sum(integral_simplices, dim=0).to("cpu").unsqueeze(-1)
+                        )
+                        results_per_batch.append(integral_simplices_batch)
+
+                    integral_polytope = torch.cat(results_per_batch, dim=-1).sum(dim=-1)
+                    # integral_simplices = torch.vmap(
+                    #     lambda s: self.integrate_simplex(s, coeffs, exponents)
+                    # )(simplices)
+                    # integral_polytope = (
+                    #     torch.sum(integral_simplices, dim=0).to("cpu").unsqueeze(-1)
+                    # )
                     results.append(integral_polytope.item())
                 except Exception as exc:
-                    print(f'Problem {problem} generated an exception: {exc}')
+                    # print(f'Problem {problem} generated an exception: {exc}')
+                    raise exc
             
         self.sequential_integration_time = time.time() - start_time
         # results = torch.concatenate(results, dim=-1)

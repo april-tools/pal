@@ -17,7 +17,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from wmipa import WMI
 from wmipa.integration import LatteIntegrator, VolestiIntegrator, SymbolicIntegrator
-from wmipa.integration.torch.wmipa.numerical_symb_integrator_pa import NumericalSymbIntegratorPA
+from gasp.torch.wmipa.numerical_symb_integrator_pa import NumericalSymbIntegratorPA
 from wmipa.utils import is_pow
 
 import torch
@@ -61,10 +61,13 @@ def get_integrators(args):
     if args.integrator == "torch":
         import time
         time_start = time.time()
+        base = 10*1024
         if args.monomials_use_float64:
-            batch_size = 1024
+            batch_size = base
         else:
-            batch_size = 1024
+            batch_size = base
+        if args.total_degree > 40:
+            batch_size = int(base / 2)
         integrator = NumericalSymbIntegratorPA(
             total_degree=args.total_degree,
             variable_map=args.variable_map,
