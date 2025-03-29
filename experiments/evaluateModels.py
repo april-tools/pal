@@ -1,3 +1,4 @@
+# noqa: F811, E402
 import argparse
 import json
 import os
@@ -10,7 +11,6 @@ from utils.io import check_path_exists, check_path_not_exists, problems_from_den
 from utils.run import get_integrators, get_wmi_id, compute_wmi, run_fn_with_timeout, WMIResult
 
 # add parent directory to import path
-import os
 import sys
 module_path = os.path.abspath(os.path.join('.'))
 if module_path not in sys.path:
