@@ -2,6 +2,10 @@ from setuptools import setup, find_packages
 
 setup(
     name="gasp-wmi",
+    author="Leander Kurscheidt",
+    description="GASP! - GPU Accelerated Simplical Integrator for WMI",
+    license="MIT",
+    python_requires=">=3.10",
     version="0.1.0",
     packages=find_packages(),
     install_requires=[
