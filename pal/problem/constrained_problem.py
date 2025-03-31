@@ -2,7 +2,7 @@ import abc
 from typing import Any
 from torch.utils.data import Dataset
 # from pyxadd.diagram import Diagram
-from pal.symbolic.lra import LRAProblem
+from pal.logic.lra import LRAProblem
 
 
 class ConstrainedProblem(abc.ABC):
