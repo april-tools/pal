@@ -8,3 +8,4 @@ wmipa @ git+https://github.com/LeanderK/wmi-pa.git@405ee9a0d88d8c1014da327aca682
 networkx
 sympy>=1.13
 PySMT>=0.9.6.dev53
+frozendict

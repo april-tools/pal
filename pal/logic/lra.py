@@ -103,12 +103,12 @@ LI = LinearInequality
 
 
 class And:
-    def __init__(self, left: "LRA", right: "LRA"):
-        self.left = left
-        self.right = right
+    def __init__(self, *children: "LRA"):
+        assert len(children) > 0
+        self.children = children
 
     def __str__(self) -> str:
-        return f"({self.left}) & ({self.right})"
+        return "(" + " & ".join([str(child) for child in self.children]) + ")"
 
 
 class Or:
@@ -127,7 +127,8 @@ def gather_variables(expr: LRA) -> set[str]:
     if isinstance(expr, LinearInequality):
         return set(expr.lhs.keys())
     elif isinstance(expr, And):
-        return gather_variables(expr.left) | gather_variables(expr.right)
+        gathered_vars = [gather_variables(child) for child in expr.children]
+        return set().union(*gathered_vars)
     elif isinstance(expr, Or):
         return gather_variables(expr.left) | gather_variables(expr.right)
     else:
@@ -178,9 +179,7 @@ class LRAProblem:
 
             bounds = [to_logic(var, lb, ub) for var, (lb, ub) in self._variables.items()]
 
-            bound: LRA = bounds[0]
-            for b in bounds[1:]:
-                bound = And(bound, b)
+            bound = And(*bounds)
 
             if self._expression is None:
                 return bound
@@ -208,8 +207,11 @@ class LRAProblem:
             if isinstance(expr, LinearInequality):
                 return f(expr)
             elif isinstance(expr, And):
+                mapped_children = [
+                    recurse_expression(child) for child in expr.children
+                ]
                 return And(
-                    recurse_expression(expr.left), recurse_expression(expr.right)
+                    *mapped_children
                 )
             elif isinstance(expr, Or):
                 return Or(

@@ -66,19 +66,20 @@ class PAnd(torch.nn.Module):
     def __init__(
         self,
         orig: And,
-        left: "PLRA",
-        right: "PLRA",
+        children: list["PLRA"],
     ):
         super().__init__()
         self.orig = orig
-        self.left = left
-        self.right = right
+        self.children = torch.nn.ModuleList(children)
 
     def forward(self, x):
-        return self.left(x) & self.right(x)
+        results = [child(x) for child in self.children]
+        results = torch.stack(results, dim=0)
+        # via and operation on the first dimension
+        return torch.all(results, dim=0)
     
     def var_map_dict(self) -> dict[str, int]:
-        return self.left.var_map_dict()
+        return self.children[0].var_map_dict()
 
 
 class POr(torch.nn.Module):
