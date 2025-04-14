@@ -96,7 +96,7 @@ def calc_single_polynomial(
     xs: torch.Tensor,  # shape [batch_size, n_vars]
     coeffs: torch.Tensor,  # shape [n_monomials]
     exponents: torch.Tensor,  # shape [n_monomials, n_vars]
-):
+) -> torch.Tensor:  # shape [batch_size]
     """
     Calculate a single polynomial for a batch of inputs.
     """

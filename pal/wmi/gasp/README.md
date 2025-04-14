@@ -15,6 +15,10 @@ Install via git:
 pip install git+https://github.com/april-tools/gasp.git@master
 ```
 
+## Usage
+
+The main usage is via `NumericalSymbIntegratorPA`, which hooks into the `wmipa` API.
+
 ## Citation
 
 Leander Kurscheidt, Paolo Morettin, Roberto Sebastiani, Andrea Passerini, Antonio Vergari, A Probabilistic Neuro-symbolic Layer for Algebraic Constraint Satisfaction, arXiv:2503.19466
