@@ -1,5 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 import math
+from typing import Callable
 import torch
 import time
 from gasp.torch.wmipa.drop_in_polynomial import (
@@ -18,22 +20,37 @@ from pysmt.shortcuts import LE, LT
 # import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
+# different configurations:
+
+
+@dataclass
+class WeightedFormulaMode:
+    pass
+
+
+@dataclass
+class FunctionMode:
+    f: Callable[[torch.Tensor], torch.Tensor]
+
+
+IntegratorModes = WeightedFormulaMode | FunctionMode
+
 
 class NumericalSymbIntegratorPA(Integrator):
     def __init__(
         self,
+        mode: IntegratorModes,  # whether to integrate over the weights or the function
         total_degree: int,  # total degree of the polynomial, so max over sum of exponents for each monomial
         variable_map: dict[str, int],  # name => index
-        add_to_s=0,
         sum_seperately=False,
         with_sorting=False,
         batch_size=None,
         monomials_lower_precision=True,
         n_workers=7,
     ):
+        self.mode = mode
         self.total_degree = total_degree
         self.variable_map = variable_map
-        self.add_to_s = add_to_s
         self.dtype = torch.float64
         self.gm_points = {}
         if total_degree < 20:
@@ -55,7 +72,6 @@ class NumericalSymbIntegratorPA(Integrator):
         """
         total_degree = degree
         s = math.ceil((float(total_degree) - 1) / 2)
-        s += self.add_to_s
         self.s = s
         assert 2 * s + 1 >= total_degree
         coefficients, points = gm.prepare_grundmann_moeller(s, len(self.variable_map))
@@ -70,8 +86,12 @@ class NumericalSymbIntegratorPA(Integrator):
         for key in self.gm_points:
             (c, p) = self.gm_points[key]
             self.gm_points[key] = (c.to(device), p.to(device))
-        # self.coefficients = self.coefficients.to(device)
-        # self.points = self.points.to(device)
+        
+        if isinstance(self.mode, FunctionMode):
+            f = self.mode.f
+            # if f is a torch Module, move it to the device
+            if isinstance(f, torch.nn.Module):
+                f.to(device)
 
     def set_dtype(self, dtype):
         self.dtype = dtype
@@ -79,8 +99,12 @@ class NumericalSymbIntegratorPA(Integrator):
         for key in self.gm_points:
             (c, p) = self.gm_points[key]
             self.gm_points[key] = (c.to(dtype), p.to(dtype))
-        # self.coefficients = self.coefficients.to(dtype)
-        # self.points = self.points.to(dtype)
+
+        if isinstance(self.mode, FunctionMode):
+            f = self.mode.f
+            # if f is a torch Module, change the dtype
+            if isinstance(f, torch.nn.Module):
+                f.to(dtype)
 
     def set_batch_size(self, batch_size):
         self.batch_size = batch_size
@@ -93,7 +117,6 @@ class NumericalSymbIntegratorPA(Integrator):
 
     def _make_problem(self, weight, bounds, aliases):
         """Makes the problem to be solved by gm."""
-        integrand = Polynomial(weight, aliases)
 
         A, b = triangulate.pysmt_to_matrices(bounds, self.variable_map, aliases)
         v_rep = triangulate.h_rep_to_v_rep(A, b)
@@ -110,13 +133,21 @@ class NumericalSymbIntegratorPA(Integrator):
                 dtype = torch.float32
             else:
                 dtype = self.dtype
-            coeff, exponents = create_tensors_from_polynomial(
-                integrand, self.variable_map, dtype
-            )
+            
             simplices = triangulate.triangulate_v_rep(v_rep)
             simplices = torch.tensor(simplices, dtype=self.dtype)
 
-            return simplices, coeff, exponents
+            match self.mode:
+                case FunctionMode(_):
+                    # we don't need the weights
+                    return simplices, None, None
+                case WeightedFormulaMode():
+                    # we need the weights
+                    integrand = Polynomial(weight, aliases)
+                    coeff, exponents = create_tensors_from_polynomial(
+                        integrand, self.variable_map, dtype
+                    )
+                    return simplices, coeff, exponents
         
     def get_gm_points(self, degree):
         # self.gm_points is max_degree -> (coefficients, points)
@@ -142,12 +173,24 @@ class NumericalSymbIntegratorPA(Integrator):
         return (coefficients, points)
 
     def integrate_simplex(self, simplex, coeffs, exponents):
-        if self.monomials_lower_precision:
-            f = lambda x: calc_single_polynomial(x.to(torch.float32), coeffs, exponents).to(self.coefficients.dtype)
-        else:
-            f = lambda x: calc_single_polynomial(x, coeffs, exponents)
-        total_deg = exponents.sum(-1).max().item()
+        match self.mode:
+            case FunctionMode(_):
+                total_deg = self.total_degree
+            case WeightedFormulaMode():
+                total_deg = exponents.sum(-1).max().item()
         gm_coefficients, gm_points = self.get_gm_points(total_deg)
+
+        match self.mode:
+            case FunctionMode(f_raw):
+                if self.monomials_lower_precision:
+                    f = lambda x: f_raw(x.to(torch.float32)).to(gm_coefficients.dtype)
+                else:
+                    f = f_raw
+            case WeightedFormulaMode():
+                if self.monomials_lower_precision:
+                    f = lambda x: calc_single_polynomial(x.to(torch.float32), coeffs, exponents).to(gm_coefficients.dtype)
+                else:
+                    f = lambda x: calc_single_polynomial(x, coeffs, exponents)
 
         return gm.integrate(
             f,
