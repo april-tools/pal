@@ -7,3 +7,7 @@ update via:
 ```bash
 git subtree pull --prefix pal/wmi/gasp https://github.com/april-tools/gasp.git main --squash
 ```
+push via:
+```bash
+git subtree push --prefix=pal/wmi/gasp https://github.com/april-tools/gasp.git main
+```
