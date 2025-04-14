@@ -149,7 +149,7 @@ class NumericalSymbIntegratorPA(Integrator):
                     )
                     return simplices, coeff, exponents
         
-    def get_gm_points(self, degree):
+    def get_gm_points(self, degree) -> tuple[torch.Tensor, torch.Tensor]:
         # self.gm_points is max_degree -> (coefficients, points)
         # find the smallest key that is larger than degree
         # keys = np.array(list(self.gm_points.keys()))
