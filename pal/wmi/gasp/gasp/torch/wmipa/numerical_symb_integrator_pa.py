@@ -8,6 +8,7 @@ from gasp.torch.wmipa.drop_in_polynomial import (
     calc_single_polynomial,
     create_tensors_from_polynomial,
 )
+
 # import gasp.torch.wmipa.wmipa_monkeypatch  # noqa
 from wmipa.integration.integrator import Integrator
 
@@ -15,6 +16,7 @@ import gasp.torch.numerics.grundmann_moeller as gm
 from wmipa.integration.polytope import Polynomial
 import gasp.torch.wmipa.triangulate_inequalities as triangulate
 from pysmt.shortcuts import LE, LT
+import tqdm
 
 # # hack for the "RuntimeError: CUDA driver initialization failed." error
 # import os
@@ -47,6 +49,7 @@ class NumericalSymbIntegratorPA(Integrator):
         batch_size=None,
         monomials_lower_precision=True,
         n_workers=7,
+        tqdm_disable=True,
     ):
         self.mode = mode
         self.total_degree = total_degree
@@ -64,6 +67,7 @@ class NumericalSymbIntegratorPA(Integrator):
         self.monomials_lower_precision = monomials_lower_precision
         self.sequential_integration_time = 0.0
         self.n_workers = n_workers
+        self.tqdm_disable = tqdm_disable
         super().__init__()
 
     def prepare_grundmann_moeller(self, degree):
@@ -86,7 +90,7 @@ class NumericalSymbIntegratorPA(Integrator):
         for key in self.gm_points:
             (c, p) = self.gm_points[key]
             self.gm_points[key] = (c.to(device), p.to(device))
-        
+
         if isinstance(self.mode, FunctionMode):
             f = self.mode.f
             # if f is a torch Module, move it to the device
@@ -124,16 +128,14 @@ class NumericalSymbIntegratorPA(Integrator):
             n_vars = len(self.variable_map)
             zero_simplices = torch.zeros([0, n_vars + 1, n_vars])
             zero_coeffs = torch.zeros([0, 0], dtype=self.dtype)
-            zero_exponents = torch.zeros(
-                [0, 0, n_vars], dtype=torch.int64
-            )
+            zero_exponents = torch.zeros([0, 0, n_vars], dtype=torch.int64)
             return zero_simplices, zero_coeffs, zero_exponents
         else:
             if self.monomials_lower_precision:
                 dtype = torch.float32
             else:
                 dtype = self.dtype
-            
+
             simplices = triangulate.triangulate_v_rep(v_rep)
             simplices = torch.tensor(simplices, dtype=self.dtype)
 
@@ -148,7 +150,7 @@ class NumericalSymbIntegratorPA(Integrator):
                         integrand, self.variable_map, dtype
                     )
                     return simplices, coeff, exponents
-        
+
     def get_gm_points(self, degree) -> tuple[torch.Tensor, torch.Tensor]:
         # self.gm_points is max_degree -> (coefficients, points)
         # find the smallest key that is larger than degree
@@ -188,7 +190,9 @@ class NumericalSymbIntegratorPA(Integrator):
                     f = f_raw
             case WeightedFormulaMode():
                 if self.monomials_lower_precision:
-                    f = lambda x: calc_single_polynomial(x.to(torch.float32), coeffs, exponents).to(gm_coefficients.dtype)
+                    f = lambda x: calc_single_polynomial(
+                        x.to(torch.float32), coeffs, exponents
+                    ).to(gm_coefficients.dtype)
                 else:
                     f = lambda x: calc_single_polynomial(x, coeffs, exponents)
 
@@ -226,19 +230,25 @@ class NumericalSymbIntegratorPA(Integrator):
                 bounds.append(atom)
 
         return self._make_problem(weight, bounds, aliases)
-    
+
     def integrate_batch(self, problems, *args, **kwargs):  # type: ignore
         start_time = time.time()
         results = []
-        import tqdm
 
         def convert_to_problem_wrapper(problem):
             atom_assignments, weight, aliases, cond_assignments = problem
             return self._convert_to_problem(atom_assignments, weight, aliases)
 
         with ThreadPoolExecutor(max_workers=self.n_workers) as executor:
-            future_to_problem = {executor.submit(convert_to_problem_wrapper, problem): problem for problem in problems}
-            for future in tqdm.tqdm(as_completed(future_to_problem), total=len(problems), disable=False):
+            future_to_problem = {
+                executor.submit(convert_to_problem_wrapper, problem): problem
+                for problem in problems
+            }
+            for future in tqdm.tqdm(
+                as_completed(future_to_problem),
+                total=len(problems),
+                disable=self.tqdm_disable,
+            ):
                 try:
                     simplices, coeffs, exponents = future.result()
                     if simplices.shape[0] == 0:
@@ -252,7 +262,7 @@ class NumericalSymbIntegratorPA(Integrator):
                     results_per_batch = []
                     s_size = int(self.batch_size / 10)
                     for i in range(0, simplices.shape[0], s_size):
-                        simplices_batch = simplices[i:i+s_size]
+                        simplices_batch = simplices[i : i + s_size]
                         integral_simplices = torch.vmap(
                             lambda s: self.integrate_simplex(s, coeffs, exponents)
                         )(simplices_batch)
@@ -272,19 +282,28 @@ class NumericalSymbIntegratorPA(Integrator):
                 except Exception as exc:
                     # print(f'Problem {problem} generated an exception: {exc}')
                     raise exc
-            
+
         self.sequential_integration_time = time.time() - start_time
         # results = torch.concatenate(results, dim=-1)
-        return results, 0
+        match self.mode:
+            case FunctionMode(_):
+                if len(results) == 0:
+                    return torch.zeros([1, len(problems)]), 0
+                else:
+                    results = torch.concatenate(results, dim=-1)
+                    return results, 0
+            case WeightedFormulaMode():
+                return results, 0
 
     def integrate_batch_sequential(self, problems, *args, **kwargs):  # type: ignore
         start_time = time.time()
         results = []
         # print(f"N problems: {len(problems)}")
-        import tqdm
-        for index, (atom_assignments, weight, aliases, cond_assignments) in tqdm.tqdm(enumerate(
-            problems
-        ), total=len(problems)):
+
+        for index, (atom_assignments, weight, aliases, cond_assignments) in tqdm.tqdm(
+            enumerate(problems), total=len(problems),
+            disable=self.tqdm_disable,
+        ):
             simplices, coeffs, exponents = self._convert_to_problem(
                 atom_assignments, weight, aliases
             )
@@ -302,10 +321,18 @@ class NumericalSymbIntegratorPA(Integrator):
                 torch.sum(integral_simplices, dim=0).to("cpu").unsqueeze(-1)
             )
             results.append(integral_polytope.item())
-        
+
         self.sequential_integration_time = time.time() - start_time
         # results = torch.concatenate(results, dim=-1)
-        return results, 0
+        match self.mode:
+            case FunctionMode(_):
+                if len(results) == 0:
+                    return torch.zeros([1, len(problems)]), 0
+                else:
+                    results = torch.concatenate(results, dim=-1)
+                    return results, 0
+            case WeightedFormulaMode():
+                return results, 0
 
     def to_short_str(self):
         return "torch"
