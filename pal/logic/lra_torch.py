@@ -86,19 +86,20 @@ class POr(torch.nn.Module):
     def __init__(
         self,
         orig: Or,
-        left: "PLRA",
-        right: "PLRA",
+        children: list["PLRA"],
     ):
         super().__init__()
         self.orig = orig
-        self.left = left
-        self.right = right
+        self.children = torch.nn.ModuleList(children)
 
     def forward(self, x):
-        return self.left(x) | self.right(x)
+        results = [child(x) for child in self.children]
+        results = torch.stack(results, dim=0)
+        # via and operation on the first dimension
+        return torch.any(results, dim=0)
     
     def var_map_dict(self) -> dict[str, int]:
-        return self.left.var_map_dict()
+        return self.children[0].var_map_dict()
 
 
 PLRA = PLinearInequality | PAnd | POr
@@ -110,16 +111,16 @@ def lra_to_torch(
     if isinstance(tree, LinearInequality):
         return PLinearInequality(tree, var_dict)
     elif isinstance(tree, And):
+        children = [lra_to_torch(c) for c in tree.children]
         return PAnd(
-            tree,
-            lra_to_torch(tree.left, var_dict),
-            lra_to_torch(tree.right, var_dict),
+            orig=tree,
+            children=children,
         )
     elif isinstance(tree, Or):
+        children = [lra_to_torch(c) for c in tree.children]
         return POr(
-            tree,
-            lra_to_torch(tree.left, var_dict),
-            lra_to_torch(tree.right, var_dict),
+            orig=tree,
+            children=children,
         )
     elif isinstance(tree, LRAProblem):
         return lra_to_torch(tree.expression, var_dict)

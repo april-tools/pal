@@ -112,12 +112,12 @@ class And:
 
 
 class Or:
-    def __init__(self, left: "LRA", right: "LRA"):
-        self.left = left
-        self.right = right
+    def __init__(self, *children: "LRA"):
+        assert len(children) > 0
+        self.children = children
 
     def __str__(self) -> str:
-        return f"({self.left}) | ({self.right})"
+        return "(" + " | ".join([str(child) for child in self.children]) + ")"
 
 
 LRA = LinearInequality | And | Or
@@ -130,7 +130,8 @@ def gather_variables(expr: LRA) -> set[str]:
         gathered_vars = [gather_variables(child) for child in expr.children]
         return set().union(*gathered_vars)
     elif isinstance(expr, Or):
-        return gather_variables(expr.left) | gather_variables(expr.right)
+        gathered_vars = [gather_variables(child) for child in expr.children]
+        return set().union(*gathered_vars)
     else:
         raise ValueError(f"Unknown type {type(expr)}")
     
@@ -214,8 +215,11 @@ class LRAProblem:
                     *mapped_children
                 )
             elif isinstance(expr, Or):
+                mapped_children = [
+                    recurse_expression(child) for child in expr.children
+                ]
                 return Or(
-                    recurse_expression(expr.left), recurse_expression(expr.right)
+                    *mapped_children
                 )
 
         if self.expression is None:
