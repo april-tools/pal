@@ -3,7 +3,7 @@ scikit-learn>=1.6.1
 pytest>=8.3.5
 requests>=2.32.3
 torch>=2.6.0
-constrained-sdd>=0.1.1
+constrained-sdd>=0.1.2
 wmipa @ git+https://github.com/LeanderK/wmi-pa.git@405ee9a0d88d8c1014da327aca68297c6f716c9e
 networkx
 sympy>=1.13

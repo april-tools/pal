@@ -3,19 +3,24 @@ from typing import Any
 from torch.utils.data import Dataset
 # from pyxadd.diagram import Diagram
 from pal.logic.lra import LRAProblem
+from dataclasses import dataclass
+
+
+@dataclass
+class DatasetResult:
+    train: Dataset
+    val: Dataset
+    test: Dataset
 
 
 class ConstrainedProblem(abc.ABC):
     @abc.abstractmethod
-    def load_dataset(self, path: str) -> tuple[Dataset, Dataset, Dataset]:
+    def load_dataset(self) -> DatasetResult:
         """
         Loads the dataset and returns the training, validation, and test datasets.
 
-        Args:
-            path (str): The path to the dataset.
-
         Returns:
-            tuple[Dataset, Dataset, Dataset]: The training, validation, and test datasets.
+            DatasetResult: The training, validation, and test datasets.
         """
         ...
 

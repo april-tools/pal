@@ -38,7 +38,7 @@ def stable_np_sum(x: np.ndarray, axis: int) -> np.ndarray:
 
 class TorchPolynomial(torch.nn.Module):
     """
-    A class representing a polynomial in PyTorch.
+    A class representing a parametarized polynomial in PyTorch.
 
     This class inherits from torch.nn.Module, and it is designed to handle polynomial operations
     using PyTorch tensors.
