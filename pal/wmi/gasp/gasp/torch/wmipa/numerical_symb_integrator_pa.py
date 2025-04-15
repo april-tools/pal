@@ -42,7 +42,7 @@ class NumericalSymbIntegratorPA(Integrator):
     def __init__(
         self,
         mode: IntegratorModes,  # whether to integrate over the weights or the function
-        total_degree: int,  # total degree of the polynomial, so max over sum of exponents for each monomial
+        total_degree: int,  # total degree of the polynomial, so max over sum of exponents for each monomial.
         variable_map: dict[str, int],  # name => index
         sum_seperately=False,
         with_sorting=False,
@@ -51,6 +51,19 @@ class NumericalSymbIntegratorPA(Integrator):
         n_workers=7,
         tqdm_disable=True,
     ):
+        """
+        Args:
+            mode (IntegratorModes): The mode to use for integration.
+            total_degree (int): The total degree of the polynomial, so max over sum of exponents for each monomial.
+                Can be an estimate for WeightedFormulaMode.
+            variable_map (dict[str, int]): A mapping from variable names to indices.
+            sum_seperately (bool, optional): Whether to sum the results separately. Defaults to False.
+            with_sorting (bool, optional): Whether to sort the results. Defaults to False.
+            batch_size (int, optional): The batch size for integration. Defaults to None.
+            monomials_lower_precision (bool, optional): Whether to use lower precision for monomials. Defaults to True.
+            n_workers (int, optional): The number of workers for parallel processing. Defaults to 7.
+            tqdm_disable (bool, optional): Whether to disable tqdm progress bar. Defaults to True.
+        """
         self.mode = mode
         self.total_degree = total_degree
         self.variable_map = variable_map
@@ -112,6 +125,9 @@ class NumericalSymbIntegratorPA(Integrator):
 
     def set_batch_size(self, batch_size):
         self.batch_size = batch_size
+
+    def set_mode(self, mode: IntegratorModes):
+        self.mode = mode
 
     def integrate(self, atom_assignments, weight, aliases, *args, **kwargs):  # type: ignore
         res_list, _ = self.integrate_batch(
@@ -301,7 +317,8 @@ class NumericalSymbIntegratorPA(Integrator):
         # print(f"N problems: {len(problems)}")
 
         for index, (atom_assignments, weight, aliases, cond_assignments) in tqdm.tqdm(
-            enumerate(problems), total=len(problems),
+            enumerate(problems),
+            total=len(problems),
             disable=self.tqdm_disable,
         ):
             simplices, coeffs, exponents = self._convert_to_problem(
