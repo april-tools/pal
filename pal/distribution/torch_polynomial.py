@@ -546,7 +546,7 @@ class SquaredTorchPolynomial(torch.nn.Module):
         )
     
 
-def do_construct_piecewise_polynomials(
+def calculate_coefficients_from_hermite_spline(
     knots: torch.Tensor,
     differences: torch.Tensor,
     y: torch.Tensor,
@@ -631,7 +631,7 @@ class CubicPiecewisePolynomial2DUnivariate(torch.nn.Module):
             shift (bool): Whether to shift the polynomial (True) or the point the
                 polynomial is evaluated at (False).
         """
-        do_construct = lambda knots, differences, y, dy: do_construct_piecewise_polynomials(
+        do_construct = lambda knots, differences, y, dy: calculate_coefficients_from_hermite_spline(
             knots, differences, y, dy, shift=shift
         )
         transformed_a, transformed_b, transformed_c, transformed_d = torch.vmap(
