@@ -6,9 +6,16 @@ import torch
 from functools import reduce
 
 from pal.logic.lra_pysmt import translate_to_pysmt
-from pal.polynomial.constrained_distribution import ConditionalConstraintedDistribution, ConstrainedDistributionBuilder, box_to_lra
+from pal.polynomial.constrained_distribution import (
+    ConditionalConstraintedDistribution,
+    ConstrainedDistributionBuilder,
+    box_to_lra,
+)
 from pal.polynomial.spline_distribution import ConditionalSplineSQ2D, SplineSQ2DBuilder
-from pal.wmi.gasp.gasp.torch.wmipa.numerical_symb_integrator_pa import FunctionMode, NumericalSymbIntegratorPA
+from pal.wmi.gasp.gasp.torch.wmipa.numerical_symb_integrator_pa import (
+    FunctionMode,
+    NumericalSymbIntegratorPA,
+)
 from wmipa.wmi import WMI as WMI_PA
 from wmipa import WMI
 
@@ -53,10 +60,7 @@ def compute_integral(
         gasp_kwargs = {}
 
     integrator = NumericalSymbIntegratorPA(
-        mode=mode,
-        total_degree=total_degree,
-        variable_map=variable_map,
-        **gasp_kwargs
+        mode=mode, total_degree=total_degree, variable_map=variable_map, **gasp_kwargs
     )
     integrator.set_device(device)
     integrator.set_dtype(precision)
