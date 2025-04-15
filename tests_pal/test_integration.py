@@ -1,5 +1,5 @@
 import pal.problem.sdd as csdd
-import pal.polynomial.spline_distribution as psd
+import pal.distribution.spline_distribution as psd
 from pal.wmi.compute_integral import integrate_distribution
 import torch
 
@@ -26,3 +26,4 @@ def test_integration_pipeline():
         device=torch.device("cpu"),
         precision=torch.float64,
     )
+

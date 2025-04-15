@@ -5,14 +5,14 @@ import torch.nn as nn
 import numpy as np
 
 from pal.logic.lra_torch import PLRA, lra_to_torch
-from pal.polynomial.constrained_distribution import (
+from pal.distribution.constrained_distribution import (
     Box,
     ConstrainedDistribution,
     ConstrainedDistributionBuilder,
     ConditionalConstraintedDistribution,
 )
 import pal.logic.lra as lra
-from pal.polynomial.torch_polynomial import (
+from pal.distribution.torch_polynomial import (
     CubicPiecewisePolynomial2DUnivariate,
     SquaredParamsWithCoefficientsTorchPolynomial,
     TorchPolynomial,

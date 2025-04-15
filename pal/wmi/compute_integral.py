@@ -6,12 +6,12 @@ import torch
 from functools import reduce
 
 from pal.logic.lra_pysmt import translate_to_pysmt
-from pal.polynomial.constrained_distribution import (
+from pal.distribution.constrained_distribution import (
     ConditionalConstraintedDistribution,
     ConstrainedDistributionBuilder,
     box_to_lra,
 )
-from pal.polynomial.spline_distribution import ConditionalSplineSQ2D, SplineSQ2DBuilder
+from pal.distribution.spline_distribution import ConditionalSplineSQ2D, SplineSQ2DBuilder
 from pal.wmi.gasp.gasp.torch.wmipa.numerical_symb_integrator_pa import (
     FunctionMode,
     NumericalSymbIntegratorPA,
