@@ -1,4 +1,4 @@
-import lra
+import pal.logic.lra as lra
 from pysmt.shortcuts import get_env, Symbol, Real, Plus, And, Or
 import pysmt.typing as stypes
 from pysmt.fnode import FNode
@@ -29,7 +29,7 @@ def translate_to_pysmt(
             left_sum = Plus(
                 *[
                     Real(lhs_coeff) * get_symb(lhs_var)
-                    for lhs_coeff, lhs_var in node.lhs.items()
+                    for lhs_var, lhs_coeff in node.lhs.items()
                 ]
             )
             if node.symbol == "<=":
@@ -39,13 +39,15 @@ def translate_to_pysmt(
             else:
                 raise NotImplementedError()
         elif isinstance(node, lra.And):
-            result_left = recursive_translate(node.left)
-            result_right = recursive_translate(node.right)
-            return And(result_left, result_right)
+            recursive_translate_children = [
+                recursive_translate(c) for c in node.children
+            ]
+            return And(*recursive_translate_children)
         elif isinstance(node, lra.Or):
-            result_left = recursive_translate(node.left)
-            result_right = recursive_translate(node.right)
-            return Or(result_left, result_right)
+            recursive_translate_children = [
+                recursive_translate(c) for c in node.children
+            ]
+            return Or(*recursive_translate_children)
 
     if isinstance(constraint, lra.LRAProblem):
         expr = constraint.expression

@@ -1,5 +1,5 @@
 import torch
-from lra import LRAProblem, LinearInequality, And, Or, LRA
+from .lra import LRAProblem, LinearInequality, And, Or, LRA
 
 
 class PLinearInequality(torch.nn.Module):
@@ -8,12 +8,13 @@ class PLinearInequality(torch.nn.Module):
         super().__init__()
         self.linear_constraint = linear_constraint
         self.var_dict = var_dict
+        lhs = list(linear_constraint.lhs.items())
         coeff_tensor = torch.tensor(
-            [c for _, c in linear_constraint.lhs], dtype=torch.float32
+            [c for _, c in lhs], dtype=torch.float32
         )
         self.register_buffer("coeff_tensor", coeff_tensor)
         indices_tensor = torch.tensor(
-            [var_dict[var] for var in linear_constraint.lhs], dtype=torch.int64
+            [var_dict[var] for var, _ in lhs], dtype=torch.int64
         )
         self.register_buffer("indices_tensor", indices_tensor)
 
@@ -111,13 +112,13 @@ def lra_to_torch(
     if isinstance(tree, LinearInequality):
         return PLinearInequality(tree, var_dict)
     elif isinstance(tree, And):
-        children = [lra_to_torch(c) for c in tree.children]
+        children = [lra_to_torch(c, var_dict) for c in tree.children]
         return PAnd(
             orig=tree,
             children=children,
         )
     elif isinstance(tree, Or):
-        children = [lra_to_torch(c) for c in tree.children]
+        children = [lra_to_torch(c, var_dict) for c in tree.children]
         return POr(
             orig=tree,
             children=children,

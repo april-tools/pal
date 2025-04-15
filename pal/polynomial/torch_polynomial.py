@@ -89,9 +89,13 @@ class TorchPolynomial(torch.nn.Module):
         Reorders the parameters in the polynomial according to the given mapping.
         """
         # assert the new indices are a permutation of the old indices
-        assert set(param_index_map.keys()) == set(self.param_map_dict.values())
+        assert set(param_index_map.keys()) == set(param_index_map.values())
         new_coeffs = torch.zeros_like(self.coeffs)
         new_powers = torch.zeros_like(self.powers)
+        for i in range(self.powers.shape[0]):
+            new_position = param_index_map[i]
+            new_coeffs[new_position] = self.coeffs[i]
+            new_powers[new_position] = self.powers[i]
         return TorchPolynomial(
             coeffs=new_coeffs,
             powers=new_powers,
@@ -446,7 +450,7 @@ class SquaredTorchPolynomial(torch.nn.Module):
         vectorized: bool = False,
     ) -> torch.Tensor:
 
-        y_tensor = y_tensor + self.shift.unsqueeze(0)
+        y_tensor += self.shift.unsqueeze(0)
 
         @torch.compile
         def eval_single_monomial(

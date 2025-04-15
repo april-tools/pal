@@ -33,6 +33,7 @@ class WeightedFormulaMode:
 @dataclass
 class FunctionMode:
     f: Callable[[torch.Tensor], torch.Tensor]
+    output_shape: tuple[int, ...]
 
 
 IntegratorModes = WeightedFormulaMode | FunctionMode
@@ -199,7 +200,7 @@ class NumericalSymbIntegratorPA(Integrator):
         gm_coefficients, gm_points = self.get_gm_points(total_deg)
 
         match self.mode:
-            case FunctionMode(f_raw):
+            case FunctionMode(f_raw, _):
                 if self.monomials_lower_precision:
                     f = lambda x: f_raw(x.to(torch.float32)).to(gm_coefficients.dtype)
                 else:
@@ -268,15 +269,25 @@ class NumericalSymbIntegratorPA(Integrator):
                 try:
                     simplices, coeffs, exponents = future.result()
                     if simplices.shape[0] == 0:
-                        # this won't work if results is empty but this will hopefully never happen :)
-                        results.append(torch.zeros_like(results[-1]))
+                        if len(results) == 0:
+                            match self.mode:
+                                case FunctionMode(_, out_shape):
+                                    results.append(torch.zeros((*out_shape, 1)))
+                                case WeightedFormulaMode():
+                                    results.append(torch.zeros([1, 1]))
+                        else:
+                            results.append(torch.zeros_like(results[-1]))
                         continue
                     simplices = simplices.to(self.device)
-                    coeffs = coeffs.to(self.device)
-                    exponents = exponents.to(self.device)
+                    if coeffs is not None:
+                        coeffs = coeffs.to(self.device)
+                        exponents = exponents.to(self.device)
                     # batch over simplices
                     results_per_batch = []
-                    s_size = int(self.batch_size / 10)
+                    if self.batch_size is not None:
+                        s_size = int(self.batch_size / 10)
+                    else:
+                        s_size = simplices.shape[0]
                     for i in range(0, simplices.shape[0], s_size):
                         simplices_batch = simplices[i : i + s_size]
                         integral_simplices = torch.vmap(
@@ -288,13 +299,12 @@ class NumericalSymbIntegratorPA(Integrator):
                         results_per_batch.append(integral_simplices_batch)
 
                     integral_polytope = torch.cat(results_per_batch, dim=-1).sum(dim=-1)
-                    # integral_simplices = torch.vmap(
-                    #     lambda s: self.integrate_simplex(s, coeffs, exponents)
-                    # )(simplices)
-                    # integral_polytope = (
-                    #     torch.sum(integral_simplices, dim=0).to("cpu").unsqueeze(-1)
-                    # )
-                    results.append(integral_polytope.item())
+                    
+                    match self.mode:
+                        case FunctionMode(_):
+                            results.append(integral_polytope.to("cpu").unsqueeze(-1))
+                        case WeightedFormulaMode():
+                            results.append(integral_polytope.item())
                 except Exception as exc:
                     # print(f'Problem {problem} generated an exception: {exc}')
                     raise exc
@@ -306,6 +316,8 @@ class NumericalSymbIntegratorPA(Integrator):
                 if len(results) == 0:
                     return torch.zeros([1, len(problems)]), 0
                 else:
+                    if any(r.shape[0] == 1 for r in results):
+                        print("hi")
                     results = torch.concatenate(results, dim=-1)
                     return results, 0
             case WeightedFormulaMode():

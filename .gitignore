@@ -5,3 +5,6 @@ tests/__pycache__
 constrained_sdd.egg-info
 dist
 build
+
+# all the pycache folders
+**/__pycache__/

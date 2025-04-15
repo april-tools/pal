@@ -1,8 +1,33 @@
+# flake8: noqa: E402
+from logging import warning
 import numpy as np
-from wmipa.integration.integrator import Integrator
 import torch
-from wmipa.wmi import WMI
+import shutil
+from shutil import which
 
+old_which = which
+
+
+# monkeypatch which
+# we don't have latte installed, as the install script didn't run
+def which_monkeypatch(program):
+    if program == "integrate":
+        # check if latte is installed
+        latte_result = which("integrate")
+        if latte_result is not None:
+            return latte_result
+        else:
+            # warn
+            warning("Latte is not installed. Faking path in order to load wmipa.")
+            return "monkeypatched!"
+    else:
+        return old_which(program)
+    
+
+shutil.which = which_monkeypatch
+
+from wmipa.wmi import WMI
+from wmipa.integration.integrator import Integrator
 
 def _integrate_batch_pytorch(self, problems, cache, factors=None):
     """Computes the integral of a batch of problems.

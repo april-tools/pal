@@ -1,1 +1,1 @@
-# import gasp.torch.wmipa.wmipa_monkeypatch  # noqa
+import gasp.torch.wmipa.wmipa_monkeypatch  # noqa

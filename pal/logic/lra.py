@@ -107,6 +107,12 @@ class And:
         assert len(children) > 0
         self.children = children
 
+    def __and__(self, other: "LRA"):
+        if isinstance(other, And):
+            return And(*(self.children + other.children))
+        else:
+            return And(*(self.children + [other]))
+
     def __str__(self) -> str:
         return "(" + " & ".join([str(child) for child in self.children]) + ")"
 

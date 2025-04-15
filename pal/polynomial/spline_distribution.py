@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+from pal.logic.lra_torch import PLRA, lra_to_torch
 from pal.polynomial.constrained_distribution import (
     Box,
     ConstrainedDistribution,
@@ -32,7 +33,7 @@ def compute_reordering_of_parameter_positions2d(
 
     param_start_positions: Dict[tuple[int, int], int] = {}
     assert powers.shape[1] == 2
-    assert powers.dtype() == torch.int64
+    assert powers.dtype == torch.int64
     for i in range(powers.shape[0]):
         exponent_y0 = powers[i, 0].item()
         exponent_y1 = powers[i, 1].item()
@@ -42,7 +43,9 @@ def compute_reordering_of_parameter_positions2d(
     param_index_map: Dict[int, int] = {}
     for resulting_param_index in range(outer_product_exponents.shape[0]):
         (exponent_y0, exponent_y1) = outer_product_exponents[resulting_param_index]
-        current_param_index = param_start_positions[(exponent_y0, exponent_y1)]
+        current_param_index = param_start_positions[
+            (exponent_y0.item(), exponent_y1.item())
+        ]
         param_index_map[current_param_index] = resulting_param_index
     return param_index_map
 
@@ -71,10 +74,13 @@ class SplineSQ2DBuilder(
         """
         Initializes the builder with the constraints and the number of knots and mixtures.
         """
-        super().__init__()
-        self.constraints = constraints
-        self.var_positions = var_positions
+        # Call the constructor of ConstrainedDistributionBuilder
+        ConstrainedDistributionBuilder.__init__(self, var_positions, constraints)
         assert len(var_positions) == 2
+
+        # Call the constructor of torch.nn.Module
+        torch.nn.Module.__init__(self)
+
         self.num_knots = num_knots
         self.num_mixtures = num_mixtures
 
@@ -112,10 +118,16 @@ class SplineSQ2DBuilder(
 
         self.squared_poly = self.poly_unsquared.square()
 
+    @property
+    def total_degree(self) -> int:
+        return self.squared_poly.get_max_total_degree()
+
     def enumerate_pieces(
         self,
-    ) -> list[tuple[Box, Callable[[torch.Tensor], torch.Tensor]]]:
+    ) -> list[tuple[Box, Callable[[torch.Tensor], torch.Tensor], tuple[int, ...]]]:
         results = []
+
+        shape: tuple[int] = (self.squared_poly.combinations_coefficient.shape[0],)
 
         for i in range(self.knots.shape[1] - 1):
             for j in range(self.knots.shape[1] - 1):
@@ -130,17 +142,18 @@ class SplineSQ2DBuilder(
                 lower_left = torch.stack([lower_x0, lower_x1], dim=0)
 
                 box = Box(
-                    {
+                    id=(i, j),
+                    constraints={
                         varname0: (lower_x0.item(), upper_x0.item()),
                         varname1: (lower_x1.item(), upper_x1.item()),
-                    }
+                    },
                 )
 
                 def eval_with_shift(y: torch.Tensor) -> torch.Tensor:
                     y_shifted = y - lower_left
                     return self.squared_poly.eval_tensor_vectorized(y_shifted)
 
-                results.append((box, eval_with_shift))
+                results.append((box, eval_with_shift, shape))
         return results
 
     def get_distribution(self, integrated) -> "ConditionalSplineSQ2D":
@@ -156,17 +169,18 @@ class SplineSQ2DBuilder(
         assert not (coeffs_2dgrid == 0.0).all()
 
         return ConditionalSplineSQ2D(
-            self.constraints,
-            self.var_positions,
-            self.num_knots,
-            self.num_mixtures,
-            self.poly_unsquared,
-            coeffs_2dgrid,
+            constraints=self.constraints,
+            var_positions=self.var_positions,
+            num_knots=self.num_knots,
+            num_mixtures=self.num_mixtures,
+            poly_unsquared=self.poly_unsquared,
+            integral_coeffs=coeffs_2dgrid,
+            knots=self.knots,
         )
 
 
 class ConditionalSplineSQ2D(
-    ConditionalConstraintedDistribution[ConstrainedDistribution]
+    ConditionalConstraintedDistribution[ConstrainedDistribution], torch.nn.Module
 ):
     """
     A class that represents a constrained distribution P(Y|psi) on some unknown parameters psi.
@@ -189,22 +203,21 @@ class ConditionalSplineSQ2D(
         """
         Initializes the builder with the constraints and the number of knots and mixtures.
         """
-        super().__init__()
+        # Call the constructor of ConstrainedDistributionBuilder
+        ConditionalConstraintedDistribution.__init__(self, constraints)
+        assert len(var_positions) == 2
+
+        # Call the constructor of torch.nn.Module
+        torch.nn.Module.__init__(self)
         self.register_buffer("integral_coeffs", integral_coeffs)
         differences = knots[1:] - knots[:-1]
         self.register_buffer("differences", differences)
         self.register_buffer("knots", knots)
-        self.constraints = constraints
+        self.torch_constraints = lra_to_torch(constraints, var_positions)
         self.var_positions = var_positions
         self.num_knots = num_knots
         self.num_mixtures = num_mixtures
         self.poly_unsquared = poly_unsquared
-
-    def get_constraints(self):
-        """
-        Returns the constraints of the distribution.
-        """
-        return self.constraints
 
     def calculate_partition_function(
         self, param_tensor: torch.Tensor, sq_eparamslon=-1
@@ -259,7 +272,7 @@ class ConditionalSplineSQ2D(
         raise NotImplementedError("Not implemented yet")
 
 
-class SplineSQ2D(ConstrainedDistribution):
+class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
     """
     A class that represents a constrained distribution P(Y) for some squared, univariate mixture of splines.
     """
@@ -272,6 +285,7 @@ class SplineSQ2D(ConstrainedDistribution):
     def __init__(
         self,
         constraints: lra.LRAProblem,
+        torch_constraints: PLRA,
         var_positions: Dict[str, int],
         num_knots: int,
         num_mixtures: int,
@@ -284,12 +298,18 @@ class SplineSQ2D(ConstrainedDistribution):
         """
         Initializes the builder with the constraints and the number of knots and mixtures.
         """
-        super().__init__()
+        # Call the constructor of ConstrainedDistributionBuilder
+        ConstrainedDistribution.__init__(self, constraints)
+        assert len(var_positions) == 2
+
+        # Call the constructor of torch.nn.Module
+        torch.nn.Module.__init__(self)
         self.poly_unsquared = poly_unsquared
         self.num_knots = num_knots
         self.num_mixtures = num_mixtures
         self.var_positions = var_positions
         self.constraints = constraints
+        self.torch_constraints = torch_constraints
         self.register_buffer("knots", knots)
         self.register_buffer("differences", differences)
         self.register_buffer("coeffs_2dgrid", coeffs_2dgrid)

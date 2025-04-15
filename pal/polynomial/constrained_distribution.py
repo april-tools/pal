@@ -41,14 +41,50 @@ class ConstrainedDistributionBuilder(Generic[A], ABC):
     """ "
     A class that represents a constrained distribution that has not been integrated yet."
     """
+    _var_positions: dict[str, int]
+    _constraints: lra.LRAProblem
+
+    def __init__(self, var_positions: dict[str, int], constraints: lra.LRAProblem):
+        """
+        Initializes the distribution with the variable positions and constraints.
+        """
+        self._var_positions = var_positions
+        self._constraints = constraints
+        # validate the var_positions
+        for var in constraints._variables.keys():
+            if var not in var_positions:
+                raise ValueError(f"Variable {var} not in var_positions")
+            
+    @property
+    def var_positions(self) -> dict[str, int]:
+        """
+        Returns the variable positions in the tensor.
+        """
+        return self._var_positions
+    
+    @property
+    def constraints(self) -> lra.LRAProblem:
+        """
+        Returns the constraints of the distribution.
+        """
+        return self._constraints
+
+    @property
+    @abstractmethod
+    def total_degree(self) -> int:
+        """
+        Returns the total degree of the distribution.
+        Maximum in case it's piecewise.
+        """
 
     @abstractmethod
     def enumerate_pieces(
         self,
-    ) -> list[tuple[Box, Callable[[torch.Tensor], torch.Tensor]]]:
+    ) -> list[tuple[Box, Callable[[torch.Tensor], torch.Tensor], tuple[int, ...]]]:
         """
         Enumerates the pieces of the distribution.
-        Each piece is a tuple of a box and a function that maps the input to the output per parameter (vectorized).
+        Each piece is a tuple of a box, a function that maps the input to the output per
+        parameter (vectorized) and a shape of the output of the function.
 
         Let's say the unnormalized density is f(x) = psi_1 * x*2 + psi_2 * x + psi_3 for some unknown parameters psi.
         Then the function will be: f'(x) = [x**2, x, 1]. It is used for integration over the box.
@@ -69,12 +105,20 @@ class ConditionalConstraintedDistribution(Generic[B], ABC, torch.nn.Module):
     """
     A class that represents a constrained distribution P(Y|psi) on some unknown parameters psi.
     """
+    _constraints: lra.LRAProblem
 
-    @abstractmethod
-    def get_constraints(self) -> lra.LRAProblem:
+    def __init__(self, constraints: lra.LRAProblem):
+        """
+        Initializes the distribution with the constraints.
+        """
+        self._constraints = constraints
+
+    @property
+    def constraints(self) -> lra.LRAProblem:
         """
         Returns the constraints of the distribution.
         """
+        return self._constraints
 
     @abstractmethod
     def forward(self, psi: torch.Tensor) -> B:
@@ -93,15 +137,23 @@ class ConstrainedDistribution(ABC, torch.nn.Module):
     """
     A class that represents a constrained distribution P(Y) over some constraints phi.
     """
+    _constraints: lra.LRAProblem
+
+    def __init__(self, constraints: lra.LRAProblem):
+        """
+        Initializes the distribution with the constraints.
+        """
+        self._constraints = constraints
+
+    @property
+    def constraints(self) -> lra.LRAProblem:
+        """
+        Returns the constraints of the distribution.
+        """
+        return self._constraints
 
     @abstractmethod
-    def get_constraints(self) -> lra.LRAProblem:
-        """
-        Returns the constraints phi of the distribution.
-        """
-
-    @abstractmethod
-    def log_dens(self, x: torch.Tensor, eps: float) -> torch.Tensor:
+    def log_dens(self, x: torch.Tensor, eps: float, with_indicator=False) -> torch.Tensor:
         """
         Returns the log probability of the distribution.
         """
@@ -119,4 +171,4 @@ class ConstrainedDistribution(ABC, torch.nn.Module):
         """
         Returns the distribution.
         """
-        return self.log_dens(x)
+        return self.log_dens(x, eps=1e-6)
