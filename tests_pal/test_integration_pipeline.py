@@ -27,7 +27,10 @@ def test_integration_pipeline():
         precision=torch.float64,
     )
 
-    random_parameter = torch.rand(1, *conditional_spline_dist.parameter_shape())
+    random_parameter = [torch.rand(1, *s) for s in conditional_spline_dist.parameter_shape()]
 
-    spline_dist = conditional_spline_dist(random_parameter)
+    spline_dist = conditional_spline_dist(*random_parameter)
     assert spline_dist is not None
+
+    random_points = torch.rand(10, 2)
+    spline_log_dens = spline_dist.log_dens(random_points, 1e-8)

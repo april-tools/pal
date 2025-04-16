@@ -1,5 +1,5 @@
 from abc import abstractmethod, ABC
-from typing import Callable, Generic
+from typing import Callable, Generic, overload
 import torch
 from typing import TypeVar
 import pal.logic.lra as lra
@@ -99,9 +99,10 @@ class ConstrainedDistributionBuilder(Generic[A], ABC):
 
 
 B = TypeVar("B", bound="ConditionalConstraintedDistribution")
+C = TypeVar("Args", bound=tuple)
 
 
-class ConditionalConstraintedDistribution(Generic[B], ABC, torch.nn.Module):
+class ConditionalConstraintedDistribution(Generic[B, C], ABC, torch.nn.Module):
     """
     A class that represents a constrained distribution P(Y|psi) on some unknown parameters psi.
     """
@@ -121,13 +122,16 @@ class ConditionalConstraintedDistribution(Generic[B], ABC, torch.nn.Module):
         return self._constraints
 
     @abstractmethod
-    def forward(self, psi: torch.Tensor) -> B:
+    def forward(self, *psi: C) -> B:
         """
         Returns the distribution by giving the parameters psi.
         """
 
+    def __call__(self, *psi: C) -> B:
+        return super().__call__(*psi)
+
     @abstractmethod
-    def parameter_shape(self) -> tuple[int, ...]:
+    def parameter_shape(self) -> list[tuple[int, ...]]:
         """
         Returns the shape of the parameters psi.
         """
@@ -153,7 +157,7 @@ class ConstrainedDistribution(ABC, torch.nn.Module):
         return self._constraints
 
     @abstractmethod
-    def log_dens(self, x: torch.Tensor, eps: float, with_indicator=False) -> torch.Tensor:
+    def log_dens(self, x: torch.Tensor, eps: float = -1, with_indicator=False) -> torch.Tensor:
         """
         Returns the log probability of the distribution.
         """
@@ -171,4 +175,4 @@ class ConstrainedDistribution(ABC, torch.nn.Module):
         """
         Returns the distribution.
         """
-        return self.log_dens(x, eps=1e-6)
+        return self.log_dens(x)

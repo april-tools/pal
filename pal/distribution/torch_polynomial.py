@@ -598,6 +598,76 @@ def calculate_coefficients_from_hermite_spline(
         return transformed_a, transformed_b, transformed_c, transformed_d
 
 
+def calc_2d_spline_component(
+    x: torch.Tensor,  # (2)
+    knot_idx: torch.Tensor,  # (2)
+    params: torch.Tensor,  # (2, num_pieces, 4)
+) -> torch.Tensor:
+    def per_param(
+        p: torch.Tensor,  # (2, num_pieces)
+    ) -> torch.Tensor:
+        nonlocal knot_idx
+        # Ensure knot_idx is of shape (2, 1) for broadcasting
+        knot_idx = knot_idx.unsqueeze(-1)
+        # Gather the parameters corresponding to knot_idx
+        selected_params = torch.gather(p, dim=1, index=knot_idx)
+        return selected_params.squeeze(-1)  # (2)
+
+    poly_params = torch.vmap(per_param, in_dims=-1, out_dims=-1)(params)
+
+    poly_per_component = (
+        poly_params[..., 0]
+        + poly_params[..., 1] * x
+        + poly_params[..., 2] * x**2
+        + poly_params[..., 3] * x**3
+    )
+
+    return poly_per_component.prod(dim=-1)
+
+
+def calc_log_mixture(
+    x: torch.Tensor,  # (2)
+    knot_idx: torch.Tensor,  # (2)
+    m_params: torch.Tensor,  # (num_mixtures, 2, num_pieces, 4)
+    m_weights: torch.Tensor,  # (num_mixtures)
+    m_normalization: torch.Tensor,  # (num_mixtures, num_knots, num_knots)
+    eps: float = -1,  # (num_mixtures)
+):
+    """
+    Calculate the mixture of 2D splines.
+    Args:
+        x: The input tensor.
+        knot_idx: The indices of the knots.
+        m_params: The parameters of the mixture.
+        m_weights: The weights of the mixture.
+        m_normalization: The normalization coefficients of the mixture.
+        eps: A small value to avoid numerical instability.
+    Returns:
+        The log of the mixture of 2D splines.
+    """
+    mixture_poly: torch.Tensor = torch.vmap(
+        lambda p: calc_2d_spline_component(x, knot_idx, p)
+    )(
+        m_params
+    ).abs_()  # (num_mixtures)
+    m_normalization_coeff = m_normalization.sum(dim=-1).sum(
+        dim=-1
+    )  # (num_mixtures)
+
+    if eps != -1:
+        with torch.no_grad():
+            # mixture_poly[mixture_poly < eps] = eps
+            mixture_poly.clamp_(min=eps)
+
+    mixture_poly_log = 2 * torch.log(mixture_poly) - torch.log(
+        m_normalization_coeff
+    )
+
+    poly_log = torch.logsumexp(mixture_poly_log + torch.log(m_weights), dim=0)
+
+    return poly_log
+
+
 class CubicPiecewisePolynomial2DUnivariate(torch.nn.Module):
     # (a0 + b0 * x0 + c0 * x0^2 + d0 * x0^3) * (a1 + b1 * x1 + c1 * x1^2 + d1 * x1^3)
     def __init__(

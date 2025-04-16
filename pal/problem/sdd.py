@@ -80,7 +80,8 @@ class SDDSingleImageTrajectory(ConstrainedProblem):
         idx_to_label = {i: name for name, i in self.get_y_vars().items()}
         lra_constraints = logic_translate_compatiblity(idx_to_label, constraints)
 
-        lra_problem = lra.LRAProblem(expression=lra_constraints, variables=bounds)
+        name = f"SDD({self.dataset.img_id})"
+        lra_problem = lra.LRAProblem(expression=lra_constraints, variables=bounds, name=name)
 
         return lra_problem
 

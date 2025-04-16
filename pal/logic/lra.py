@@ -149,11 +149,13 @@ class LRAProblem:
     """
     _expression: LRA
     _variables: dict[str, tuple[float, float]] | list[str]  # var_name -> (lower, upper)
+    _name: str
 
     def __init__(
-            self,
-            expression: LRA,
-            variables: dict[str, tuple[float, float]] | list[str] | None
+        self,
+        expression: LRA,
+        variables: dict[str, tuple[float, float]] | list[str] | None,
+        name: str,
     ):
         self._expression = expression
         if variables is None:
@@ -166,7 +168,12 @@ class LRAProblem:
                     raise ValueError(
                         f"Variable {var} is mentioned in the expression but not in the variables list."
                     )
-                
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
+
     @property
     def expression(self) -> LRA:
         # check if self._variables is empty dict

@@ -16,6 +16,7 @@ from pal.distribution.torch_polynomial import (
     CubicPiecewisePolynomial2DUnivariate,
     SquaredParamsWithCoefficientsTorchPolynomial,
     TorchPolynomial,
+    calc_log_mixture,
     calculate_coefficients_from_hermite_spline,
 )
 
@@ -129,8 +130,8 @@ class SplineSQ2DBuilder(
 
         shape: tuple[int] = (self.squared_poly.combinations_coefficient.shape[0],)
 
-        for i in range(self.knots.shape[1] - 1):
-            for j in range(self.knots.shape[1] - 1):
+        for i in range(self.knots.shape[0] - 1):
+            for j in range(self.knots.shape[0] - 1):
                 lower_x0 = self.knots[i, 0]
                 upper_x0 = self.knots[i + 1, 0]
                 lower_x1 = self.knots[j, 1]
@@ -179,8 +180,11 @@ class SplineSQ2DBuilder(
         )
 
 
+Args_forward = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+
+
 class ConditionalSplineSQ2D(
-    ConditionalConstraintedDistribution[ConstrainedDistribution], torch.nn.Module
+    ConditionalConstraintedDistribution[ConstrainedDistribution, Args_forward]
 ):
     """
     A class that represents a constrained distribution P(Y|psi) on some unknown parameters psi.
@@ -236,11 +240,13 @@ class ConditionalSplineSQ2D(
         # compute all combinations of the coefficients via outer product
         # resulting in a tensor of shape (num_pieces, num_pieces, 4, 2)
         # via meshgrid
-        mesh_coeffs_0, mesh_coeffs_1 = torch.vmap(lambda a, b: torch.meshgrid(a, b), in_dims=1, out_dims=2)(
-            all_coeffs_poly_0, all_coeffs_poly_1
-        )
+        mesh_coeffs_0, mesh_coeffs_1 = torch.vmap(
+            lambda a, b: torch.meshgrid(a, b), in_dims=1, out_dims=2
+        )(all_coeffs_poly_0, all_coeffs_poly_1)
 
-        meshed_coeffs = torch.stack([mesh_coeffs_0, mesh_coeffs_1], dim=-1)  # (num_knots, num_knots, 4, 2)
+        meshed_coeffs = torch.stack(
+            [mesh_coeffs_0, mesh_coeffs_1], dim=-1
+        )  # (num_knots, num_knots, 4, 2)
 
         def compute_integral_helper(coeff):
             coeff_0 = coeff[..., 0]
@@ -263,9 +269,7 @@ class ConditionalSplineSQ2D(
             )
             return combs.sum(dim=-1)
 
-        def eval_param_instance_on_grid(
-                param_gridded: torch.Tensor
-                ) -> torch.Tensor:
+        def eval_param_instance_on_grid(param_gridded: torch.Tensor) -> torch.Tensor:
             grid_1d_func = torch.vmap(eval_param_single_instance)
             grid_2d_func = torch.vmap(grid_1d_func)
 
@@ -276,7 +280,7 @@ class ConditionalSplineSQ2D(
         #     coeffs_grid
         # )
         return eval_param_instance_on_grid(coeffs_grid)
-    
+
     def calculate_partition_function(
         self,
         poly_params: torch.Tensor,  # (num_mixtures, 2, num_knots-1, 4)
@@ -284,27 +288,31 @@ class ConditionalSplineSQ2D(
         """
         Returns the partition function of the distribution on the grid.
         """
-        return torch.vmap(self._calculate_partition_function_component)(
-            poly_params
-        )
+        return torch.vmap(self._calculate_partition_function_component)(poly_params)
 
     def forward(
         self,
-        params: torch.Tensor,  # [batch_size, num_mixtures, 2, self.num_knots, 2] or [num_mixtures, 2, self.num_knots, 2]
+        params_value: torch.Tensor,  # [batch_size, num_mixtures, 2, self.num_knots] or [num_mixtures, 2, self.num_knots]
+        params_derivative: torch.Tensor,  # [batch_size, num_mixtures, 2, self.num_knots] or [num_mixtures, 2, self.num_knots]
+        params_mixture_weights: torch.Tensor,  # [batch_size, num_mixtures] or [num_mixtures]
     ) -> "SplineSQ2D":
-        if len(params.shape) == 3:
-            params = params.unsqueeze(0)
+        if len(params_value.shape) == 3:
+            assert len(params_derivative.shape) == 3
+            assert len(params_mixture_weights.shape) == 1
+
+            params_value = params_value.unsqueeze(0)
+            params_derivative = params_derivative.unsqueeze(0)
+            params_mixture_weights = params_mixture_weights.unsqueeze(0)
 
         def do_calc_for_1dcomponent(
-            params_for_1dcomponent: torch.Tensor,  # (num_knots, value + derivative)
+            params_1d_value: torch.Tensor,  # (num_knots)
+            params_1d_derivative,  # (num_knots)
             knots1d: torch.Tensor,  # (num_knots)
             differences1d: torch.Tensor,  # (num_knots-1)
         ):
             """
             Calculate the polynomial parameters for a 1d component.
             """
-            params_1d_value = params_for_1dcomponent[:, 0]
-            params_1d_derivative = params_for_1dcomponent[:, 1]
             poly_params = calculate_coefficients_from_hermite_spline(
                 knots=knots1d,
                 differences=differences1d,
@@ -314,34 +322,39 @@ class ConditionalSplineSQ2D(
             return torch.stack(poly_params, dim=-1)  # (num_knots-1, 4)
 
         def do_calc_for_2dcomponent(
-            params_for_component: torch.Tensor,  # (2, num_knots, value + derivative)
+            params_2d_value: torch.Tensor,  # (2, num_knots)
+            params_2d_derivative,  # (2, num_knots)
         ):
             """
             Calculate the polynomial parameters for a 2d component.
             """
-            return torch.vmap(do_calc_for_1dcomponent, in_dims=(0,1,1))(
-                params_for_component, self.knots, self.differences
+            return torch.vmap(do_calc_for_1dcomponent, in_dims=(0, 0, 1, 1))(
+                params_2d_value, params_2d_derivative, self.knots, self.differences
             )  # (2, num_knots-1, 4)
 
         def do_calc_for_mixture(
-            params_for_mixture: torch.Tensor,  # (num_mixtures, 2, num_knots, value + derivative)
+            params_for_mixture_value: torch.Tensor,  # (num_mixtures, 2, num_knots)
+            params_for_mixture_derivative: torch.Tensor,  # (num_mixtures, 2, num_knots)
         ):
             """
             Calculate the polynomial parameters for a mixture.
             """
             return torch.vmap(do_calc_for_2dcomponent)(
-                params_for_mixture
+                params_for_mixture_value, params_for_mixture_derivative
             )  # (num_mixtures, 2, num_knots-1, 4)
 
-        poly_params = torch.vmap(do_calc_for_mixture)(params)  # output (b, num_mixtures, 2, num_knots-1, 4)
+        poly_params = torch.vmap(do_calc_for_mixture)(
+            params_value, params_derivative
+        )  # output (b, num_mixtures, 2, num_knots-1, 4)
 
         # integrate the polynomial
-        integrals_on_grid = torch.vmap(
-            self.calculate_partition_function
-        )(poly_params)  # (b, num_mixtures, num_knots-1, num_knots-1)
+        integrals_on_grid = torch.vmap(self.calculate_partition_function)(
+            poly_params
+        )  # (b, num_mixtures, num_knots-1, num_knots-1)
 
         return SplineSQ2D(
             constraints=self.constraints,
+            torch_constraints=self.torch_constraints,
             var_positions=self.var_positions,
             num_knots=self.num_knots,
             num_mixtures=self.num_mixtures,
@@ -350,15 +363,33 @@ class ConditionalSplineSQ2D(
             knots=self.knots,
             differences=self.differences,
             poly_params=poly_params,
+            mixture_weights=params_mixture_weights,
+        )
+
+    def __call__(
+        self,
+        params_value: torch.Tensor,
+        params_derivative: torch.Tensor,
+        params_mixture_weights: torch.Tensor,
+    ) -> "SplineSQ2D":
+        return super().__call__(params_value, params_derivative, params_mixture_weights)
+
+    def __repr__(self) -> str:
+        m = self.num_mixtures
+        n = self.num_knots
+        c = self.constraints.name
+        return (
+            f"ConditionalSplineSQ2D(num_mixtures={m}, num_knots={n}, constraints={c})"
         )
 
     def parameter_shape(self):
-        return (
-            self.num_mixtures,
-            2,
-            self.num_knots,
-            2,
-        )  # (num_mixtures, 2, num_knots, value + derivative)
+        knots = (self.num_mixtures, 2, self.num_knots)
+        mixture_shape = (self.num_mixtures,)
+        return [
+            knots,  # value
+            knots,  # derivative
+            mixture_shape,  # mixture weights
+        ]
 
 
 class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
@@ -366,10 +397,17 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
     A class that represents a constrained distribution P(Y) for some squared, univariate mixture of splines.
     """
 
-    knots: torch.Tensor  # (num_knots, 2) because of memory layout, these are the positions
+    knots: (
+        torch.Tensor
+    )  # (num_knots, 2) because of memory layout, these are the positions
     differences: torch.Tensor  # (num_knots-1, 2) because of memory layout
-    integrals_2dgrid: torch.Tensor  # (b, num_mixtures, num_knots, num_knots), b=1 gets broadcasted
-    poly_params: torch.Tensor  # (b, num_mixtures, 2, num_knots, 4), b=1 gets broadcasted
+    integrals_2dgrid: (
+        torch.Tensor
+    )  # (b, num_mixtures, num_knots, num_knots), b=1 gets broadcasted
+    poly_params: (
+        torch.Tensor
+    )  # (b, num_mixtures, 2, num_knots, 4), b=1 gets broadcasted
+    mixture_weights: torch.Tensor  # (b, num_mixtures), b=1 gets broadcasted
 
     def __init__(
         self,
@@ -383,6 +421,7 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
         differences: torch.Tensor,
         integrals_2dgrid: torch.Tensor,
         poly_params: torch.Tensor,
+        mixture_weights: torch.Tensor,
     ):
         """
         Initializes the builder with the constraints and the number of knots and mixtures.
@@ -397,9 +436,93 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
         self.num_knots = num_knots
         self.num_mixtures = num_mixtures
         self.var_positions = var_positions
-        self.constraints = constraints
         self.torch_constraints = torch_constraints
         self.register_buffer("knots", knots)
         self.register_buffer("differences", differences)
         self.register_buffer("integrals_2dgrid", integrals_2dgrid)
         self.register_buffer("poly_params", poly_params)
+        self.register_buffer("mixture_weights", mixture_weights)
+
+    def get_starting_coords_bin(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Get the starting coordinates of the bin that x is in.
+        """
+        x0 = torch.searchsorted(self.knots[:, 0], x[:, 0])
+        x0 = torch.clamp(x0 - 1, 0, len(self.knots) - 2)
+
+        x1 = torch.searchsorted(self.knots[:, 1], x[:, 1])
+        x1 = torch.clamp(x1 - 1, 0, len(self.knots) - 2)
+
+        return torch.stack([self.knots[x0, 0], self.knots[x1, 1]], dim=1)
+
+    def get_bins(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns the indices and the starting coordinates of the bin that x is in.
+        """
+
+        def get_info_1d(
+            knots,  # (num_knots)
+            xs,  # (batch_size)
+        ):
+            knot_idx = torch.searchsorted(knots, xs)
+            knot_idx = torch.clamp(knot_idx - 1, 0, len(knots) - 2)
+
+            start_coords = knots[knot_idx]
+
+            return start_coords, knot_idx
+
+        get_info_2d = torch.vmap(get_info_1d, in_dims=(1, 1), out_dims=1)
+
+        return get_info_2d(self.knots, x)
+
+    def log_dens(self, x, eps=-1, with_indicator=False):
+        """
+        Essentially computes log p(x) for the distribution, where p(x) is
+        composed of:
+        p_i(x) = poly_i^b(x - start_coords^b)^2 / integral_coeffs_i^b"""
+        start_coords, knot_idxs = self.get_bins(x)
+
+        eval_point = x - start_coords
+
+        if self.poly_params.shape[0] == 1:
+            # single parameter set!
+            log_dens = torch.vmap(
+                lambda x_elem, knot_elem: calc_log_mixture(
+                    x_elem,
+                    knot_elem,
+                    self.poly_params[0],
+                    self.mixture_weights[0],
+                    self.integrals_2dgrid[0],
+                    eps,
+                )
+            )(eval_point, knot_idxs)
+        else:
+            # batch of parameters
+            log_dens = torch.vmap(
+                lambda *args: calc_log_mixture(*args, eps=eps)
+            )(
+                eval_point,
+                knot_idxs,
+                self.poly_params,
+                self.mixture_weights,
+                self.integrals_2dgrid,
+            )
+        if with_indicator:
+            raise NotImplementedError(
+                "with_indicator is not implemented for SplineSQ2D"
+            )
+        
+        return log_dens
+    
+    def enumerate_pieces(self):
+        raise NotImplementedError
+
+    def __repr__(self):
+        m = self.num_mixtures
+        n = self.num_knots
+        c = self.constraints.name
+        if self.poly_params.shape[0] == 1:
+            b = ""
+        else:
+            b = f"batched={self.poly_params.shape[0]}, "
+        return f"SplineSQ2D({b}num_mixtures={m}, num_knots={n}, constraints={c})"
