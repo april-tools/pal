@@ -171,40 +171,6 @@ class TorchPolynomial(torch.nn.Module):
             variable_map_dict=state_dict["variable_map_dict"],
         )
 
-    def numerically_stable_comp(
-        self,
-        y_tensor: torch.Tensor | None,
-        param_tensor: torch.Tensor,
-        sq_epsilon: float = -1,
-    ) -> torch.Tensor:
-        assert y_tensor is not None
-
-        np_y_tensor: np.ndarray = y_tensor.detach().cpu().numpy()
-        np_param_tensor: np.ndarray = param_tensor.detach().cpu().numpy()
-        np_coeffs: np.ndarray = self.coeffs.detach().cpu().numpy()
-        np_powers: np.ndarray = self.powers.detach().cpu().numpy()
-
-        np_y_tensor = np_y_tensor.astype(np.float128)
-        np_param_tensor = np_param_tensor.astype(np.float128)
-        np_coeffs = np_coeffs.astype(np.float128)
-
-        monomials = np.power(
-            np_y_tensor[..., np.newaxis, :], np_powers[np.newaxis, :]
-        ).prod(axis=-1)
-        weighted = (np_coeffs[np.newaxis, :] * np_param_tensor) * monomials
-        polys = stable_np_sum(weighted, axis=-1)
-        polys = polys.astype(np.float32)
-
-        poly_torch = torch.tensor(polys, device=y_tensor.device, dtype=y_tensor.dtype)
-
-        if self.absolute:
-            poly_torch = poly_torch.abs()
-
-        if sq_epsilon != -1:
-            with torch.no_grad():
-                poly_torch[poly_torch < sq_epsilon] = sq_epsilon
-        return poly_torch
-
     def get_variable_map_dict(self) -> Dict[str, int]:
         return self.variable_map_dict  # type: ignore
 
@@ -269,40 +235,6 @@ class SquaredParamsWithCoefficientsTorchPolynomial(torch.nn.Module):
             indices_params=state_dict["indices_params"],
             variable_map_dict=state_dict["variable_map_dict"],
         )
-
-    def numerically_stable_comp(
-        self,
-        y_tensor: torch.Tensor | None,
-        param_tensor: torch.Tensor,
-        sq_epsilon: float = -1,
-    ) -> torch.Tensor:
-        assert y_tensor is None
-        np_param_tensor: np.ndarray = param_tensor.detach().cpu().numpy()
-        np_coeffs: np.ndarray = self.coeffs.detach().cpu().numpy()
-
-        np_param_tensor = np_param_tensor.astype(np.float128)
-        np_coeffs = np_coeffs.astype(np.float128)
-
-        results = []
-        for i in range(np_param_tensor.shape[0]):
-            params = np_param_tensor[i]
-            params_idxs = torch.arange(0, len(params))
-            comdinations_idxs = torch.combinations(
-                params_idxs, 2, with_replacement=True
-            ).numpy()
-            combinations = [
-                params[comdinations_idxs[:, i]]
-                for i in range(comdinations_idxs.shape[1])
-            ]
-            combinations_prod = np.stack(combinations, axis=-1).prod(axis=-1)
-            results.append(stable_np_sum(np_coeffs * combinations_prod, axis=-1))
-        results_tensor = torch.tensor(
-            results, device=param_tensor.device, dtype=param_tensor.dtype
-        )
-        if sq_epsilon != -1:
-            with torch.no_grad():
-                results_tensor[results_tensor < sq_epsilon] = sq_epsilon
-        return results_tensor
 
     def get_variable_map_dict(self) -> Dict[str, int]:
         return self.variable_map_dict  # type: ignore
@@ -526,14 +458,6 @@ class SquaredTorchPolynomial(torch.nn.Module):
             variable_map_dict=state_dict["variable_map_dict"],
         )
 
-    def numerically_stable_comp(
-        self,
-        y_tensor: torch.Tensor | None,
-        param_tensor: torch.Tensor,
-        sq_epsilon: float = -1,
-    ) -> torch.Tensor:
-        raise NotImplementedError
-
     def get_variable_map_dict(self) -> Dict[str, int]:
         return self._variable_map_dict  # type: ignore
 
@@ -546,6 +470,7 @@ class SquaredTorchPolynomial(torch.nn.Module):
         )
     
 
+@torch.compile
 def calculate_coefficients_from_hermite_spline(
     knots: torch.Tensor,
     differences: torch.Tensor,
@@ -598,6 +523,7 @@ def calculate_coefficients_from_hermite_spline(
         return transformed_a, transformed_b, transformed_c, transformed_d
 
 
+@torch.compile
 def calc_2d_spline_component(
     x: torch.Tensor,  # (2)
     knot_idx: torch.Tensor,  # (2)
@@ -625,6 +551,7 @@ def calc_2d_spline_component(
     return poly_per_component.prod(dim=-1)
 
 
+@torch.compile
 def calc_log_mixture(
     x: torch.Tensor,  # (2)
     knot_idx: torch.Tensor,  # (2)
@@ -666,111 +593,3 @@ def calc_log_mixture(
     poly_log = torch.logsumexp(mixture_poly_log + torch.log(m_weights), dim=0)
 
     return poly_log
-
-
-class CubicPiecewisePolynomial2DUnivariate(torch.nn.Module):
-    # (a0 + b0 * x0 + c0 * x0^2 + d0 * x0^3) * (a1 + b1 * x1 + c1 * x1^2 + d1 * x1^3)
-    def __init__(
-        self,
-        knots: torch.Tensor,
-        a: torch.Tensor,
-        b: torch.Tensor,
-        c: torch.Tensor,
-        d: torch.Tensor,
-        shift_polynomials: bool = True,  # shift plynoial or the input
-    ):
-        super().__init__()
-        self.knots = knots
-        self.a = a
-        self.b = b
-        self.c = c
-        self.d = d
-        self.shift_polynomials = shift_polynomials
-
-    def construct_from_knots(
-        y: torch.Tensor, dy: torch.Tensor,
-        knots: torch.Tensor, differences: torch.Tensor,
-        shift: bool = True  # True shifts the polynomial, False the input
-    ) -> "CubicPiecewisePolynomial2DUnivariate":
-        """
-        Construct a piecewise cubic polynomial from the given values and derivatives at the knots.
-
-        Args:
-            y (torch.Tensor): The values of the function at the knots.
-            dy (torch.Tensor): The derivatives of the function at the knots.
-            shift (bool): Whether to shift the polynomial (True) or the point the
-                polynomial is evaluated at (False).
-        """
-        do_construct = lambda knots, differences, y, dy: calculate_coefficients_from_hermite_spline(
-            knots, differences, y, dy, shift=shift
-        )
-        transformed_a, transformed_b, transformed_c, transformed_d = torch.vmap(
-            do_construct, in_dims=-1, out_dims=-1
-        )(knots.permute(1, 0), differences, y, dy)
-
-        return CubicPiecewisePolynomial2DUnivariate(
-            knots.permute(1, 0), transformed_a, transformed_b, transformed_c, transformed_d,
-            shift_polynomials=shift
-        )
-
-    def get_coefficients(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        def get_coeff_1d(knots, x, a, b, c, d):
-            knot_idx = torch.searchsorted(knots, x)
-            knot_idx = torch.clamp(knot_idx - 1, 0, len(knots) - 2)
-
-            a = a[knot_idx]
-            b = b[knot_idx]
-            c = c[knot_idx]
-            d = d[knot_idx]
-
-            return a, b, c, d
-
-        a, b, c, d = torch.vmap(get_coeff_1d, in_dims=-1, out_dims=-1)(
-            self.knots, x, self.a, self.b, self.c, self.d
-        )
-
-        return a, b, c, d
-
-    def get_starting_coords_bin(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Get the starting coordinates of the bin that x is in.
-        """
-        x0 = torch.searchsorted(self.knots[:, 0], x[:, 0])
-        x0 = torch.clamp(x0 - 1, 0, len(self.knots) - 2)
-
-        x1 = torch.searchsorted(self.knots[:, 1], x[:, 1])
-        x1 = torch.clamp(x1 - 1, 0, len(self.knots) - 2)
-
-        return torch.stack([self.knots[x0, 0], self.knots[x1, 1]], dim=1)
-
-    def enumerate_coefficients(self) -> torch.Tensor:
-        """
-        Enumerate the coefficients of the piecewise polynomial.
-
-        Returns:
-            torch.Tensor: A tensor of shape (num_pieces, 4, 2) representing the coefficients
-            of the piecewise polynomial.
-        """
-        coefficients = torch.stack([self.a, self.b, self.c, self.d], dim=1)
-        return coefficients
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        a, b, c, d = self.get_coefficients(x)
-        # naive implementation makes it easier to understand and test
-        if self.shift_polynomials:
-            eval_point = x
-        else:
-            eval_point = x - self.get_starting_coords_bin(x)
-        return (
-            a[..., 0]
-            + b[..., 0] * eval_point[..., 0]
-            + c[..., 0] * eval_point[..., 0] ** 2
-            + d[..., 0] * eval_point[..., 0] ** 3
-        ) * (
-            a[..., 1]
-            + b[..., 1] * eval_point[..., 1]
-            + c[..., 1] * eval_point[..., 1] ** 2
-            + d[..., 1] * eval_point[..., 1] ** 3
-        )
