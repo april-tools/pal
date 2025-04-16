@@ -1,5 +1,5 @@
 from abc import abstractmethod, ABC
-from typing import Callable, Generic, overload
+from typing import Callable, Generic
 import torch
 from typing import TypeVar
 import pal.logic.lra as lra

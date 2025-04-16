@@ -1,8 +1,5 @@
-from typing import Any, Callable, Dict, Self
-from frozendict import frozendict
+from typing import Callable, Dict
 import torch
-import torch.nn as nn
-import numpy as np
 
 from pal.logic.lra_torch import PLRA, lra_to_torch
 from pal.distribution.constrained_distribution import (
@@ -13,7 +10,6 @@ from pal.distribution.constrained_distribution import (
 )
 import pal.logic.lra as lra
 from pal.distribution.torch_polynomial import (
-    SquaredParamsWithCoefficientsTorchPolynomial,
     TorchPolynomial,
     calc_log_mixture,
     calculate_coefficients_from_hermite_spline,
@@ -291,8 +287,10 @@ class ConditionalSplineSQ2D(
 
     def forward(
         self,
-        params_value: torch.Tensor,  # [batch_size, num_mixtures, 2, self.num_knots] or [num_mixtures, 2, self.num_knots]
-        params_derivative: torch.Tensor,  # [batch_size, num_mixtures, 2, self.num_knots] or [num_mixtures, 2, self.num_knots]
+        params_value: torch.Tensor,  # [batch_size, num_mixtures, 2, self.num_knots]
+                                     # or [num_mixtures, 2, self.num_knots]
+        params_derivative: torch.Tensor,  # [batch_size, num_mixtures, 2, self.num_knots]
+                                          # or [num_mixtures, 2, self.num_knots]
         params_mixture_weights: torch.Tensor,  # [batch_size, num_mixtures] or [num_mixtures]
     ) -> "SplineSQ2D":
         if len(params_value.shape) == 3:

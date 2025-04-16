@@ -1,6 +1,7 @@
 from pal.wmi.compute_integral import integrate_distribution
 import torch
 
+
 def test_spline_integration_analytic_case2():
     # Define a more complex LRA problem with known constraints
     from pal.logic.lra import LinearInequality as LI, And, LRAProblem
