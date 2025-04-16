@@ -33,4 +33,6 @@ def test_integration_pipeline():
     assert spline_dist is not None
 
     random_points = torch.rand(10, 2)
-    spline_log_dens = spline_dist.log_dens(random_points, 1e-8)
+    spline_log_dens = spline_dist.log_dens(random_points)
+
+    assert spline_log_dens is not None

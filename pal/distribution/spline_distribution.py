@@ -217,7 +217,7 @@ class ConditionalSplineSQ2D(
         self.register_buffer("integral_coeffs", integral_coeffs)
         differences = knots[1:] - knots[:-1]
         self.register_buffer("differences", differences)
-        self.register_buffer("knots", knots)
+        self.register_buffer("knots", knots.contiguous())
         self.torch_constraints = lra_to_torch(constraints, var_positions)
         self.var_positions = var_positions
         self.num_knots = num_knots
