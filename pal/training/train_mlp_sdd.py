@@ -138,8 +138,6 @@ def main(args: argparse.Namespace) -> None:
     num_dens_knots_values = np.prod(shape_value)
 
     def reparam(out_nn: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        nonlocal num_mixture_param
-        nonlocal num_dens_knots_values
         param_mixture_weights = out_nn[:, :num_mixture_param].softmax(dim=-1)
 
         param_dens_value = out_nn[:, num_mixture_param:(num_mixture_param + num_dens_knots_values)]
