@@ -71,16 +71,18 @@ class PAnd(torch.nn.Module):
     ):
         super().__init__()
         self.orig = orig
-        self.children = torch.nn.ModuleList(children)
+        # assert children is list
+        assert isinstance(children, list)
+        self.clauses = torch.nn.ModuleList(children)
 
     def forward(self, x):
-        results = [child(x) for child in self.children]
+        results = [child(x) for child in self.clauses]
         results = torch.stack(results, dim=0)
         # via and operation on the first dimension
         return torch.all(results, dim=0)
     
     def var_map_dict(self) -> dict[str, int]:
-        return self.children[0].var_map_dict()
+        return self.clauses[0].var_map_dict()
 
 
 class POr(torch.nn.Module):
@@ -91,16 +93,16 @@ class POr(torch.nn.Module):
     ):
         super().__init__()
         self.orig = orig
-        self.children = torch.nn.ModuleList(children)
+        self.clauses = torch.nn.ModuleList(children)
 
     def forward(self, x):
-        results = [child(x) for child in self.children]
+        results = [child(x) for child in self.clauses]
         results = torch.stack(results, dim=0)
         # via and operation on the first dimension
         return torch.any(results, dim=0)
     
     def var_map_dict(self) -> dict[str, int]:
-        return self.children[0].var_map_dict()
+        return self.clauses[0].var_map_dict()
 
 
 PLRA = PLinearInequality | PAnd | POr

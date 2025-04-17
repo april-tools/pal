@@ -10,6 +10,12 @@ class Box:
         self.id = id
         self.constraints = constraints
 
+    def __repr__(self):
+        bounds_str = ", ".join(
+            f"{var}: ({lb}, {ub})" for var, (lb, ub) in self.constraints.items()
+        )
+        return f"Box(id={self.id}, constraints={bounds_str})"
+
 
 def neutral_box(vars: list[str]) -> Box:
     """

@@ -476,7 +476,7 @@ def calculate_coefficients_from_hermite_spline(
     differences: torch.Tensor,
     y: torch.Tensor,
     dy: torch.Tensor,
-    shift: bool = True,
+    shift: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Construct a piecewise cubic polynomial from the given values and derivatives at the knots.
@@ -576,20 +576,27 @@ def calc_log_mixture(
         lambda p: calc_2d_spline_component(x, knot_idx, p)
     )(
         m_params
-    ).abs_()  # (num_mixtures)
+    )#.abs_()  # (num_mixtures)
     m_normalization_coeff = m_normalization.sum(dim=-1).sum(
         dim=-1
     )  # (num_mixtures)
 
-    if eps != -1:
-        with torch.no_grad():
-            # mixture_poly[mixture_poly < eps] = eps
-            mixture_poly.clamp_(min=eps)
-
-    mixture_poly_log = 2 * torch.log(mixture_poly) - torch.log(
-        m_normalization_coeff
+    densities_components = mixture_poly ** 2 / m_normalization_coeff
+    poly_log = torch.logsumexp(
+        torch.log(densities_components) + torch.log(m_weights), dim=0
     )
 
-    poly_log = torch.logsumexp(mixture_poly_log + torch.log(m_weights), dim=0)
+    # if eps != -1:
+    #     with torch.no_grad():
+    #         # mixture_poly[mixture_poly < eps] = eps
+    #         mixture_poly.clamp_(min=eps)
+
+    # mixture_poly_log = 2 * torch.log(mixture_poly) - torch.log(
+    #     m_normalization_coeff
+    # )
+
+    # mixture_poly_log = torch.log(mixture_poly ** 2)
+
+    # poly_log = torch.logsumexp(mixture_poly_log + torch.log(m_weights), dim=0)
 
     return poly_log

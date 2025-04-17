@@ -105,6 +105,7 @@ def integrate_distribution(
 
     integrals = {}
     for box, f, shape in d.enumerate_pieces():
+        # print(box.__repr__())
         constraints_boxed = constraints_all_lra.expression & box_to_lra(box)
         constraints_smt, _ = translate_to_pysmt(constraints_boxed)
 

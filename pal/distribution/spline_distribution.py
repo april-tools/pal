@@ -78,7 +78,9 @@ class SplineSQ2DBuilder(
         torch.nn.Module.__init__(self)
 
         self.num_knots = num_knots
+        assert num_knots > 1
         self.num_mixtures = num_mixtures
+        assert num_mixtures > 0
 
         y_pos_dict = {i: name for name, i in var_positions.items()}
         self.y_pos_dict = y_pos_dict
@@ -145,11 +147,16 @@ class SplineSQ2DBuilder(
                     },
                 )
 
-                def eval_with_shift(y: torch.Tensor) -> torch.Tensor:
-                    y_shifted = y - lower_left
+                
+                def eval_with_shift(y: torch.Tensor, shift: torch.Tensor) -> torch.Tensor:
+                    y_shifted = y - shift
                     return self.squared_poly.eval_tensor_vectorized(y_shifted)
 
-                results.append((box, eval_with_shift, shape))
+                # due to reuse of the scope we need to bing the shift
+                def scoped_eval(shift: torch.Tensor) -> Callable[[torch.Tensor], torch.Tensor]:
+                    return lambda y: eval_with_shift(y, shift)
+
+                results.append((box, scoped_eval(lower_left), shape))
         return results
 
     def get_distribution(self, integrated) -> "ConditionalSplineSQ2D":
@@ -505,9 +512,8 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
                 self.integrals_2dgrid,
             )
         if with_indicator:
-            raise NotImplementedError(
-                "with_indicator is not implemented for SplineSQ2D"
-            )
+            is_valid = self.torch_constraints(x)
+            log_dens[~is_valid] = float("-inf")
         
         return log_dens
     

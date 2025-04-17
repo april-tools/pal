@@ -36,3 +36,6 @@ def test_integration_pipeline():
     spline_log_dens = spline_dist.log_dens(random_points)
 
     assert spline_log_dens is not None
+
+    spline_log_dens_with_indicator = spline_dist.log_dens(random_points, with_indicator=True)
+    assert spline_log_dens_with_indicator is not None
