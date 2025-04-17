@@ -45,8 +45,8 @@ class NumericalSymbIntegratorPA(Integrator):
         mode: IntegratorModes,  # whether to integrate over the weights or the function
         total_degree: int,  # total degree of the polynomial, so max over sum of exponents for each monomial.
         variable_map: dict[str, int],  # name => index
-        sum_seperately=False,
-        with_sorting=False,
+        sum_seperately=True,
+        with_sorting=True,
         batch_size=None,
         monomials_lower_precision=True,
         n_workers=7,
@@ -58,8 +58,8 @@ class NumericalSymbIntegratorPA(Integrator):
             total_degree (int): The total degree of the polynomial, so max over sum of exponents for each monomial.
                 Can be an estimate for WeightedFormulaMode.
             variable_map (dict[str, int]): A mapping from variable names to indices.
-            sum_seperately (bool, optional): Whether to sum the results separately. Defaults to False.
-            with_sorting (bool, optional): Whether to sort the results. Defaults to False.
+            sum_seperately (bool, optional): Whether to sum the results separately. Defaults to True.
+            with_sorting (bool, optional): Whether to sort the results. Defaults to True.
             batch_size (int, optional): The batch size for integration. Defaults to None.
             monomials_lower_precision (bool, optional): Whether to use lower precision for monomials. Defaults to True.
             n_workers (int, optional): The number of workers for parallel processing. Defaults to 7.

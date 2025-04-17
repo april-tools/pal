@@ -44,8 +44,8 @@ class TorchPolynomial(torch.nn.Module):
     using PyTorch tensors.
 
     Args:
-        coeffs (torch.Tensor): Tensor containing the coefficients of the polynomial.
-        powers (torch.Tensor): Tensor containing the powers of the polynomial.
+        coeffs (torch.Tensor): Tensor containing the coefficients of the polynomial. Shape: (num_terms,).
+        powers (torch.Tensor): Tensor containing the powers of the polynomial. Shape: (num_terms, num_vars).
         variable_map_dict (Dict[str, int] | frozendict[str, int]): Dictionary mapping variable names to their indices.
         absolute (bool): Whether to take the absolute value of the polynomial. Defaults to True.
     """
@@ -529,6 +529,16 @@ def calc_2d_spline_component(
     knot_idx: torch.Tensor,  # (2)
     params: torch.Tensor,  # (2, num_pieces, 4)
 ) -> torch.Tensor:
+    """
+    Calculate the 2D spline component for the given x and knot_idx.
+    The spline is the product of two cubic polynomials, one for each dimension.
+    Args:
+        x: The input tensor.
+        knot_idx: The indices of the knots.
+        params: The parameters of the spline.
+    Returns:
+        The calculated spline component.
+    """
     def per_param(
         p: torch.Tensor,  # (2, num_pieces)
     ) -> torch.Tensor:
@@ -576,7 +586,7 @@ def calc_log_mixture(
         lambda p: calc_2d_spline_component(x, knot_idx, p)
     )(
         m_params
-    )#.abs_()  # (num_mixtures)
+    )  # .abs_()  # (num_mixtures)
     m_normalization_coeff = m_normalization.sum(dim=-1).sum(
         dim=-1
     )  # (num_mixtures)
@@ -585,18 +595,5 @@ def calc_log_mixture(
     poly_log = torch.logsumexp(
         torch.log(densities_components) + torch.log(m_weights), dim=0
     )
-
-    # if eps != -1:
-    #     with torch.no_grad():
-    #         # mixture_poly[mixture_poly < eps] = eps
-    #         mixture_poly.clamp_(min=eps)
-
-    # mixture_poly_log = 2 * torch.log(mixture_poly) - torch.log(
-    #     m_normalization_coeff
-    # )
-
-    # mixture_poly_log = torch.log(mixture_poly ** 2)
-
-    # poly_log = torch.logsumexp(mixture_poly_log + torch.log(m_weights), dim=0)
 
     return poly_log

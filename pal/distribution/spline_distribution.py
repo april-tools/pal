@@ -21,7 +21,15 @@ def compute_reordering_of_parameter_positions2d(
 ) -> Dict[int, int]:
     """
     Compute the reordering of the parameter positions for the polynomial so that
-    it conforms to the combination.
+    it conforms to the combination of univariate polynomials.
+
+    Parameters:
+    - deg (int): The degree of the polynomial.
+    - powers (torch.Tensor): A tensor of shape [n_mon, 2] containing the powers of the polynomial terms.
+      Each row represents a monomial with two variables.
+
+    Returns:
+    - Dict[int, int]: A mapping from the current parameter index to the reordered parameter index.
     """
     exponents_y0 = torch.arange(deg + 1)
     exponents_y1 = torch.arange(deg + 1)
@@ -478,7 +486,7 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
 
         return get_info_2d(self.knots, x)
 
-    def log_dens(self, x, eps=-1, with_indicator=False):
+    def log_dens(self, x, eps=-1, with_indicator=False) -> torch.Tensor:
         """
         Essentially computes log p(x) for the distribution, where p(x) is
         composed of:

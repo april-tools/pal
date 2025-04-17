@@ -1,5 +1,5 @@
 import pal.problem.sdd as csdd
-import pal.distribution.spline_distribution as psd
+import pal.distribution.spline_distribution as spline
 from pal.wmi.compute_integral import integrate_distribution
 import torch
 
@@ -13,7 +13,7 @@ def test_integration_pipeline():
     # load the constraints
     lra_problem = sdd.create_constraints()
 
-    spline_distribution_builder = psd.SplineSQ2DBuilder(
+    spline_distribution_builder = spline.SplineSQ2DBuilder(
         constraints=lra_problem,
         var_positions=sdd.get_y_vars(),
         num_knots=3,
