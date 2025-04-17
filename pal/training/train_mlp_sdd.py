@@ -69,6 +69,16 @@ class SimpleFC(Generic[T], nn.Module):
 
 
 def main(args: argparse.Namespace) -> None:
+    # check if random seed is set
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed)
+    else:
+        args.seed = int(time.time())
+        torch.manual_seed(args.seed)
+        np.random.seed(args.seed)
+        print(f"Random seed set to {args.seed}")
+
     sdd = csdd.SDDSingleImageTrajectory(
         img_id=args.img_id,
         path="./data/sdd",
@@ -159,11 +169,6 @@ def main(args: argparse.Namespace) -> None:
         f"Train size: {len(dataset_train)}, Val size: {len(dataset_val)}, Test size: {len(dataset_test)}"
     )
 
-    # check if random seed is set
-    if args.seed is not None:
-        torch.manual_seed(args.seed)
-        np.random.seed(args.seed)
-
     model.to(device)
     conditional_spline_dist.to(device)
     precision = torch.float64 if args.use_float64 else torch.float32
@@ -200,6 +205,14 @@ def main(args: argparse.Namespace) -> None:
 
     param_deriv_dens_scale = 0.1
 
+    # Create a unique directory for this run
+    run_id = f"run_{int(time.time())}"
+    checkpoint_dir = os.path.join("./data/sdd_checkpoints", run_id)
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    best_model_path = os.path.join(checkpoint_dir, "best_model.pth")
+
+    best_val_ll = float('-inf')
+
     for epoch in tqdm(range(epochs), desc="Epochs"):
         model.train()
         for i, (x, y) in enumerate(tqdm(loader, desc="Training", leave=False)):
@@ -227,6 +240,28 @@ def main(args: argparse.Namespace) -> None:
                 val_ll.append(log_dens.to("cpu"))
             val_ll = torch.cat(val_ll).mean()
             print(f"Epoch {epoch}: Validation log-likelihood: {val_ll:.4f}")
+
+            # Save the best model
+            if val_ll > best_val_ll:
+                best_val_ll = val_ll
+                torch.save(model.state_dict(), best_model_path)
+                print(f"Best model saved with validation log-likelihood: {best_val_ll:.4f}")
+
+    # Load the best model for testing
+    model.load_state_dict(torch.load(best_model_path))
+    print(f"Best model restored for testing from {best_model_path}.")
+
+    # validation
+    with torch.no_grad():
+        val_ll = []
+        for i, (x, y) in enumerate(tqdm(loader_val, desc="Validation", leave=False)):
+            x = x.to(device).to(precision)
+            y = y.to(device).to(precision)
+
+            log_dens = model(x).log_dens(y)
+            val_ll.append(log_dens.to("cpu"))
+        val_ll = torch.cat(val_ll).mean()
+        print(f"Validation log-likelihood: {val_ll:.4f} (reference: {best_val_ll:.4f})")
 
     # test
     with torch.no_grad():
@@ -265,13 +300,13 @@ def args():
         "--net_size",
         type=str,
         choices=["small", "medium", "large"],
-        default="medium",
+        default="large",
         help="Size of the neural network",
     )
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=64,
+        default=32,
         help="Batch size for training",
     )
     parser.add_argument(

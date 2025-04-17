@@ -251,7 +251,9 @@ class ConditionalSplineSQ2D(
         # resulting in a tensor of shape (num_pieces, num_pieces, 4, 2)
         # via meshgrid
         mesh_coeffs_0, mesh_coeffs_1 = torch.vmap(
-            lambda a, b: torch.meshgrid(a, b), in_dims=1, out_dims=2
+            lambda a, b: torch.meshgrid(a, b, indexing="ij"),  # Added indexing="ij"
+            in_dims=1,
+            out_dims=2,
         )(all_coeffs_poly_0, all_coeffs_poly_1)
 
         meshed_coeffs = torch.stack(
