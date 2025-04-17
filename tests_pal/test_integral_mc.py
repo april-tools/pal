@@ -4,10 +4,8 @@ from pal.wmi.compute_integral import integrate_distribution
 from pal.logic.lra_torch import lra_to_torch
 import torch
 
-from tests_pal.reference_integral_spline_old import recreate_mc_example
-
 def test_spline_integration_mc_pipeline():
-    # set seed
+    # Set seed for reproducibility
     torch.manual_seed(42)
 
     # Define a more complex LRA problem with known constraints
@@ -48,11 +46,11 @@ def test_spline_integration_mc_pipeline():
     torch_constraints = lra_to_torch(constraints, var_positions)
 
     # Monte Carlo integration via rejection sampling
-    num_samples = 5000000
+    num_samples = 5_000_000
     samples = []
     while sum(s.shape[0] for s in samples) < num_samples:
         # Sample uniformly from the bounding box [0, 1] x [0, 2]
-        candidate_samples = torch.rand(100000, 2)
+        candidate_samples = torch.rand(100_000, 2)
         candidate_samples[:, 1] *= 2  # Scale y to [0, 2]
 
         # Apply rejection criterion using compiled constraints
@@ -63,8 +61,8 @@ def test_spline_integration_mc_pipeline():
 
     # Randomly initialize parameters for the spline distribution
     random_parameter = [torch.rand(1, *s) for s in integrated_distribution.parameter_shape()]
-    random_parameter[0] = 10*random_parameter[0]  # Scale the values to be larger than the derivatives
-    # softmax over mixture weights
+    random_parameter[0] = 10 * random_parameter[0]  # Scale the values to be larger than the derivatives
+    # Softmax over mixture weights
     random_parameter[-1] = torch.nn.functional.softmax(random_parameter[-1], dim=-1)
 
     # Create the spline distribution
@@ -74,13 +72,13 @@ def test_spline_integration_mc_pipeline():
     log_densities = spline_dist.log_dens(samples)
     densities = torch.exp(log_densities)
 
-    area = integrated_distribution.integral_coeffs[:,:,0].sum()
+    area = integrated_distribution.integral_coeffs[:, :, 0].sum()
 
     assert torch.isclose(area, torch.tensor(1.5), atol=1e-2), \
         f"Area {area} is not close to the expected value 1.5"
 
     # Compute the Monte Carlo estimate of the integral
-    mc_integral = densities.mean() * area # Multiply by the area of the bounding box
+    mc_integral = densities.mean() * area  # Multiply by the area of the bounding box
 
     # Assert that the Monte Carlo estimate converges to 1
     assert torch.isclose(mc_integral, torch.tensor(1.0), atol=1e-2), \
