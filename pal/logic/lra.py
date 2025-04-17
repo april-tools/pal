@@ -1,5 +1,3 @@
-
-
 from logging import warning
 from typing import Callable
 
@@ -176,10 +174,10 @@ class LRAProblem:
 
     @property
     def expression(self) -> LRA:
-        # check if self._variables is empty dict
+        # Check if self._variables is an empty dict
         if not self._variables:
             warning("No bounds for the variables defined in the constraint")
-            # all empty
+            # All empty
             return self._expression
         elif isinstance(self._variables, dict):
             if self._expression is not None:
@@ -200,7 +198,7 @@ class LRAProblem:
             else:
                 return And(self._expression, bound)
         else:
-            # it's a list of variables
+            # It's a list of variables
             return self._expression
                 
     def map_constraints(self, f: Callable[[LinearInequality], LinearInequality]) -> "LRAProblem":

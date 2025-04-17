@@ -147,7 +147,6 @@ class SplineSQ2DBuilder(
                     },
                 )
 
-                
                 def eval_with_shift(y: torch.Tensor, shift: torch.Tensor) -> torch.Tensor:
                     y_shifted = y - shift
                     return self.squared_poly.eval_tensor_vectorized(y_shifted)

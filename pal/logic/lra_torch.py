@@ -71,14 +71,14 @@ class PAnd(torch.nn.Module):
     ):
         super().__init__()
         self.orig = orig
-        # assert children is list
+        # Assert children is a list
         assert isinstance(children, list)
         self.clauses = torch.nn.ModuleList(children)
 
     def forward(self, x):
         results = [child(x) for child in self.clauses]
         results = torch.stack(results, dim=0)
-        # via and operation on the first dimension
+        # Perform AND operation on the first dimension
         return torch.all(results, dim=0)
     
     def var_map_dict(self) -> dict[str, int]:
@@ -98,7 +98,7 @@ class POr(torch.nn.Module):
     def forward(self, x):
         results = [child(x) for child in self.clauses]
         results = torch.stack(results, dim=0)
-        # via and operation on the first dimension
+        # Perform OR operation on the first dimension
         return torch.any(results, dim=0)
     
     def var_map_dict(self) -> dict[str, int]:
@@ -133,7 +133,7 @@ def lra_to_torch(
 
 def lra_state_dict_to_torch(tree: LRA, state_dict: dict, prefix="") -> PLRA:
     if isinstance(tree, LinearInequality):
-        # remove leading dot if present
+        # Remove leading dot if present
         if prefix.startswith("."):
             prefix = prefix[1:]
         var_dict = state_dict[f"{prefix}.var_dict"]

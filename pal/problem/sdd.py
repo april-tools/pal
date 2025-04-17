@@ -102,5 +102,5 @@ class SDDSingleImageTrajectory(ConstrainedProblem):
             "img_id": self.dataset.img_id,
             "window_size": self.window_size,
             "sampling_rate": self.sampling_rate,
-            "predict_horizon_samples": self.predict_horzon_samples,
+            "predict_horizon_samples": self.predict_horizon_samples,
         }
