@@ -146,6 +146,7 @@ class SplineSQ2DBuilder(
                 varname1 = self.y_pos_dict[1]
 
                 lower_left = torch.stack([lower_x0, lower_x1], dim=0)
+                lower_left = lower_left.to(self.knots.device)
 
                 box = Box(
                     id=(i, j),

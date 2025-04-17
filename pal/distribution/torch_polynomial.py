@@ -63,6 +63,8 @@ class TorchPolynomial(torch.nn.Module):
         super().__init__()
         self.register_buffer("coeffs", coeffs)
         self.register_buffer("powers", powers)
+        if not isinstance(variable_map_dict, frozendict):
+            variable_map_dict = frozendict(variable_map_dict)
         self.variable_map_dict = variable_map_dict
         assert coeffs.shape[0] == powers.shape[0]
         self.absolute = absolute

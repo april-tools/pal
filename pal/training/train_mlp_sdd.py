@@ -6,6 +6,13 @@
 #
 ###############################################
 
+if __name__ == "__main__":
+    import os
+    import sys
+    module_path = os.path.abspath(os.path.join('.'))
+    if module_path not in sys.path:
+        sys.path.append(module_path)
+
 import pal.problem.sdd as csdd
 import pal.distribution.spline_distribution as spline
 from pal.wmi.compute_integral import integrate_distribution
@@ -16,6 +23,7 @@ import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 import argparse
+import time
 
 T = TypeVar("T")
 
@@ -78,12 +86,22 @@ def main(args: argparse.Namespace) -> None:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    spline_distribution_builder.to(device)
+
+    gasp_kwargs = {
+        "batch_size": 256,
+    }
+
     # create the distribution
+    start_time = time.time()
     conditional_spline_dist = integrate_distribution(
         d=spline_distribution_builder,
         device=device,
         precision=torch.float64,
+        gasp_kwargs=gasp_kwargs,
     )
+    end_time = time.time()
+    print(f"Time to integrate distribution: {end_time - start_time:.2f} seconds")
 
     shape_value, shape_derivative, shape_mixture_weights = (
         conditional_spline_dist.parameter_shape()
@@ -106,7 +124,11 @@ def main(args: argparse.Namespace) -> None:
         + np.prod(shape_mixture_weights)
     )
 
+    num_mixture_param = np.prod(shape_mixture_weights)
+    num_dens_knots_values = np.prod(shape_value)
+
     def reparam(out_nn: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        nonlocal num_mixture_param, num_dens_knots_values
         param_mixture_weights = out_nn[:, :num_mixture_param].softmax(dim=-1)
 
         param_dens_value = out_nn[:, num_mixture_param:(num_mixture_param + num_dens_knots_values)]
@@ -162,9 +184,6 @@ def main(args: argparse.Namespace) -> None:
     loader_test = DataLoader(dataset_test, batch_size=batch_size)
 
     if args.init_last_layer_positive:
-        num_mixture_param = np.prod(shape_mixture_weights)
-        num_dens_knots_values = np.prod(shape_value)
-
         with torch.no_grad():
             last_layer = model.fcs[-1]
             pos_sub = 0.1 * torch.abs(
@@ -233,13 +252,13 @@ def args():
     parser.add_argument(
         "--num_knots",
         type=int,
-        default=10,
+        default=14,
         help="Number of knots to use for the spline distribution",
     )
     parser.add_argument(
         "--num_mixtures",
         type=int,
-        default=5,
+        default=8,
         help="Number of mixtures to use for the spline distribution",
     )
     parser.add_argument(
@@ -258,7 +277,7 @@ def args():
     parser.add_argument(
         "--lr",
         type=float,
-        default=1e-3,
+        default=1e-4,
         help="Learning rate for the optimizer",
     )
     parser.add_argument(
