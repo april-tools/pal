@@ -10,3 +10,6 @@ sympy>=1.13
 PySMT>=0.9.6.dev53
 frozendict
 tqdm
+package_root
+jupyerlab
+matplotlib
