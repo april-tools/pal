@@ -11,5 +11,5 @@ PySMT>=0.9.6.dev53
 frozendict
 tqdm
 package_root
-jupyerlab
+jupyterlab
 matplotlib
