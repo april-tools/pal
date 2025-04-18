@@ -6,74 +6,7 @@ from pal.logic.lra_torch import lra_to_torch
 from scipy import ndimage
 import torch
 
-
-blue_red6 = LinearSegmentedColormap.from_list(
-    "my_gradient",
-    (
-        # Edit this gradient at https://eltos.github.io/gradient/#0:FFC94C-20:75EB6E-40.1:2B72DE-44:2900B3-50:FFFFFF-56:C70160-75.2:DE5422-100:471000
-        (0.000, (1.000, 0.788, 0.298)),
-        (0.200, (0.459, 0.922, 0.431)),
-        (0.401, (0.169, 0.447, 0.871)),
-        (0.430, (0.161, 0.000, 0.702)),
-        (0.500, (1.000, 1.000, 1.000)),
-        (0.570, (0.780, 0.004, 0.376)),
-        (0.752, (0.871, 0.329, 0.133)),
-        (1.000, (0.278, 0.063, 0.000)),
-    ),
-    N=2048,
-)
-
-blue_red5 = LinearSegmentedColormap.from_list(
-    "my_gradient",
-    (
-        # Edit this gradient at https://eltos.github.io/gradient/#0:4CFFC8-35:2B72DE-47:2900B3-50:000000-53:C70160-65:DE5422-100:F9FC4A
-        (0.000, (1.000, 0.788, 0.298)),
-        (0.200, (0.459, 0.922, 0.431)),
-        (0.401, (0.169, 0.447, 0.871)),
-        (0.470, (0.161, 0.000, 0.702)),
-        (0.500, (1.000, 1.000, 1.000)),
-        (0.530, (0.780, 0.004, 0.376)),
-        (0.752, (0.871, 0.329, 0.133)),
-        (1.000, (0.278, 0.063, 0.000)),
-    ),
-    N=2048,
-)
-
-blue_red5_transparent = LinearSegmentedColormap.from_list(
-    "my_gradient",
-    (
-        # Edit this gradient at https://eltos.github.io/gradient/#0:4CFFC8-35:2B72DE-47:2900B3-50:000000-53:C70160-65:DE5422-100:F9FC4A
-        (0.000, (1.000, 0.788, 0.298, 1.0)),
-        (0.200, (0.459, 0.922, 0.431, 1.0)),
-        (0.401, (0.169, 0.447, 0.871, 1.0)),
-        (0.470, (0.161, 0.000, 0.702, 1.0)),
-        (0.499, (0.161, 0.000, 0.702, 0.0)),
-        (0.500, (1.000, 1.000, 1.000, 0.0)),
-        (0.501, (0.780, 0.004, 0.376, 0.0)),
-        (0.530, (0.780, 0.004, 0.376, 1.0)),
-        (0.752, (0.871, 0.329, 0.133, 1.0)),
-        (1.000, (0.278, 0.063, 0.000, 1.0)),
-    ),
-    N=2048,
-)
-
-blue_red6 = LinearSegmentedColormap.from_list(
-    "my_gradient",
-    (
-        # Edit this gradient at https://eltos.github.io/gradient/#0:4CFFC8-35:2B72DE-47:2900B3-50:000000-53:C70160-65:DE5422-100:F9FC4A
-        (0.000, (1.000, 0.788, 0.298)),
-        (0.200, (0.459, 0.922, 0.431)),
-        (0.401, (0.169, 0.447, 0.871)),
-        (0.480, (0.161, 0.000, 0.702)),
-        (0.500, (1.000, 1.000, 1.000)),
-        (0.520, (0.780, 0.004, 0.376)),
-        (0.752, (0.871, 0.329, 0.133)),
-        (1.000, (0.278, 0.063, 0.000)),
-    ),
-    N=2048,
-)
-
-blue_red6_transapernt = LinearSegmentedColormap.from_list(
+blue_red6_transparent = LinearSegmentedColormap.from_list(
     "my_gradient",
     (
         # Edit this gradient at https://eltos.github.io/gradient/#0:4CFFC8-35:2B72DE-47:2900B3-50:000000-53:C70160-65:DE5422-100:F9FC4A
@@ -87,22 +20,6 @@ blue_red6_transapernt = LinearSegmentedColormap.from_list(
         (0.520, (0.780, 0.004, 0.376, 1.0)),
         (0.752, (0.871, 0.329, 0.133, 1.0)),
         (1.000, (0.278, 0.063, 0.000, 1.0)),
-    ),
-    N=2048,
-)
-
-blue_red8 = LinearSegmentedColormap.from_list(
-    "my_gradient",
-    (
-        # Edit this gradient at https://eltos.github.io/gradient/#0:FFC94C-20:75EB6E-35:2B72DE-41:2900B3-50:FFFFFF-59:C70160-75.2:DE5422-100:471000
-        (0.000, (1.000, 0.788, 0.298)),
-        (0.200, (0.459, 0.922, 0.431)),
-        (0.350, (0.169, 0.447, 0.871)),
-        (0.400, (0.161, 0.000, 0.702)),
-        (0.500, (1.000, 1.000, 1.000)),
-        (0.600, (0.780, 0.004, 0.376)),
-        (0.752, (0.871, 0.329, 0.133)),
-        (1.000, (0.278, 0.063, 0.000)),
     ),
     N=2048,
 )
@@ -125,10 +42,31 @@ blue_red8_transparent = LinearSegmentedColormap.from_list(
     N=2048,
 )
 
-the_div_colormap = blue_red8
+the_div_colormap = blue_red8_transparent
 
 
 def prepare_meshgrid(problem: ConstrainedProblem, resolution):
+    """
+    Prepares a meshgrid for visualizing a constrained problem.
+
+    Args:
+        problem (ConstrainedProblem): An instance of the constrained problem 
+            containing variables and constraints.
+        resolution (int): The resolution of the meshgrid, determining the 
+            number of points along each axis.
+
+    Returns:
+        tuple: A tuple containing:
+            - mesh (torch.Tensor): A flattened tensor of meshgrid points with 
+              shape (resolution^2, number_of_variables).
+            - mesh_grid (tuple of torch.Tensor): A tuple of tensors representing 
+              the grid for each variable.
+            - img_extent (list): A list defining the extent of the image in the 
+              format [x_min, x_max, y_min, y_max].
+            - valid (torch.Tensor): A tensor of shape (resolution, resolution) 
+              indicating whether each point in the meshgrid satisfies the 
+              constraints (True for valid points, False otherwise).
+    """
     var_dict = problem.get_y_vars()
     constraints = problem.create_constraints()
 
@@ -147,7 +85,7 @@ def prepare_meshgrid(problem: ConstrainedProblem, resolution):
         limits[y_pos_dict[1]][1],
     ]
 
-    mesh_grid = torch.meshgrid(*linspaces)
+    mesh_grid = torch.meshgrid(*linspaces, indexing="ij")
     mesh = torch.stack(mesh_grid, dim=-1).reshape(-1, len(var_dict))
 
     assert constraints.expression is not None
@@ -161,6 +99,23 @@ def prepare_meshgrid(problem: ConstrainedProblem, resolution):
 
 
 def prepare_border(problem: ConstrainedProblem, meshgrid):
+    """
+    Prepares a border(!) mask for a constrained problem using a given meshgrid.
+
+    This function evaluates the constraints of a given problem over a meshgrid,
+    applies a binary threshold, and identifies the border of the valid region
+    using binary erosion.
+
+    Args:
+        problem (ConstrainedProblem): The constrained problem containing the 
+            constraints and variable definitions.
+        meshgrid (list of torch.Tensor or list of numpy.ndarray): A list of 
+            two 1D arrays or tensors representing the meshgrid coordinates.
+
+    Returns:
+        numpy.ndarray: A binary mask representing the border of the valid 
+        region in the meshgrid.
+    """
     constraints_generic = problem.create_constraints()
     assert constraints_generic.expression is not None
     pytorch_constraints = lra_to_torch(
@@ -191,7 +146,7 @@ def prepare_border(problem: ConstrainedProblem, meshgrid):
     return border
 
 
-def plot_in_paper_diverging_theme(
+def plot_in_diverging_theme(
     the_ax,
     data,
     valid,
@@ -225,14 +180,15 @@ def plot_in_paper_diverging_theme(
                 levels=[-0.5, 0.5],
                 colors="None",
                 hatches=["//", None],
-                ls=None,
                 extent=img_extent,
                 origin="upper",
                 zorder=0,
             )
-            for collection in contour.collections:
-                collection.set_edgecolor("pink")
-                collection.set_linewidth(0)  # Remove contour lines
+            contour.set_edgecolor("pink")
+            contour.set_linewidth(0)
+            # for collection in contour.collections:
+            #     collection.set_edgecolor("pink")
+            #     collection.set_linewidth(0)  # Remove contour lines
         the_ax.contour(
             border,
             colors="pink",
@@ -271,13 +227,14 @@ def plot_in_paper_diverging_theme(
                 levels=[-0.5, 0.5],
                 colors="None",
                 hatches=["//", None],
-                ls=None,
                 extent=img_extent,
                 origin="upper",
             )
-            for collection in contour.collections:
-                collection.set_edgecolor("pink")
-                collection.set_linewidth(0)  # Remove contour lines
+            contour.set_edgecolor("pink")
+            contour.set_linewidth(0)
+            # for collection in contour.collections:
+            #     collection.set_edgecolor("pink")
+            #     collection.set_linewidth(0)  # Remove contour lines
         the_ax.contour(
             border,
             colors="pink",
@@ -297,4 +254,4 @@ def plot_in_paper_diverging_theme(
         spine.set_linewidth(spine_lw)
 
 
-plot_in_paper_theme = plot_in_paper_diverging_theme
+plot_diverging = plot_in_diverging_theme

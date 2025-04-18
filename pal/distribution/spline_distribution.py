@@ -494,6 +494,10 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
         Essentially computes log p(x) for the distribution, where p(x) is
         composed of:
         p_i(x) = poly_i^b(x - start_coords^b)^2 / integral_coeffs_i^b"""
+        # check shape
+        assert x.shape[-1] == 2, "Input must be 2D"
+        assert len(x.shape) == 2, "Input must be batch of 2D points"
+        
         start_coords, knot_idxs = self.get_bins(x)
 
         eval_point = x - start_coords
