@@ -126,7 +126,7 @@ class And:
         if isinstance(other, And):
             return And(*(self.children + other.children))
         else:
-            return And(*(self.children + [other]))
+            return And(*(list(self.children) + [other]))
 
     def __str__(self) -> str:
         return "(" + " & ".join([str(child) for child in self.children]) + ")"
@@ -259,7 +259,8 @@ class LRAProblem:
             return self._expression
 
     def map_constraints(
-        self, f: Callable[[LinearInequality], LinearInequality]
+        self,
+        f: Callable[[LinearInequality], LinearInequality]
     ) -> "LRAProblem":
         """
         Applies a function `f` to each `LinearConstraint` in the expression tree while keeping
@@ -268,6 +269,8 @@ class LRAProblem:
         Args:
             f (Callable[[LinearConstraint], LinearConstraint]): The function to apply to each
             `LinearConstraint`.
+            drop_vars (list[str]): A list of variables to to drop as a result of the mapping.
+                This is used for removing variables that are no longer needed after the mapping.
 
         Returns:
             LinearIneqLogicTree: A new expression tree with the modified `LinearConstraint` objects.
@@ -285,7 +288,7 @@ class LRAProblem:
                 return Or(*mapped_children)
 
         if self.expression is None:
-            return LRAProblem(None, self._variables)
+            return LRAProblem(None, self._variables, self._name)
         else:
             expr = recurse_expression(self._expression)
             variables = gather_variables(expr)
@@ -293,7 +296,7 @@ class LRAProblem:
                 sub_vars = {var: self._variables[var] for var in variables}
             else:
                 sub_vars = [var for var in self._variables if var in variables]
-            return LRAProblem(expr, sub_vars)
+            return LRAProblem(expr, sub_vars, self._name)
 
     def get_global_limits(self) -> dict[str, tuple[float, float]]:
         """
@@ -309,9 +312,9 @@ class LRAProblem:
                 "Global limits are not available when variables are provided as a list."
             )
 
-    def __and__(self, other: LRA | Box):
+    def __and__(self, other: LRA | Box) -> "LRAProblem":
         if isinstance(other, LRA):
-            return LRAProblem(self.expression & other, self._variables)
+            return LRAProblem(self.expression & other, self._variables, self._name)
         elif isinstance(other, Box):
             # via global bounds
             if isinstance(self._variables, dict):

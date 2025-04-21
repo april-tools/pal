@@ -279,6 +279,8 @@ class SquaredTorchPolynomial(torch.nn.Module, VariableMapMixin, StateMixin):
         VariableMapMixin.__init__(self, variable_map_dict)
         self.register_buffer("coeffs", coeffs)
         self.register_buffer("powers", powers)
+        if params.shape[0] == 1:
+            params = params.squeeze(0)
         self.register_buffer("params", params)
         assert coeffs.shape[0] == powers.shape[0]
 

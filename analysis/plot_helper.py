@@ -165,14 +165,6 @@ def plot_in_diverging_theme(
     # plt.figure()
     # f = plt.gcf()
     # the_ax = plt.gca()
-    if plot_max_value is None:
-        the_max = data.max()
-    else:
-        the_max = plot_max_value
-
-    if norm is not None:
-        the_max = norm.vmax
-
     if with_contour and plot_borders_below:
         if hatched:
             contour = the_ax.contourf(
@@ -197,22 +189,32 @@ def plot_in_diverging_theme(
             origin="upper",
             zorder=0,
         )
-    the_data = data.copy()
 
-    # negative values are valid, positve values are invalid
-    # I know this is stupid, but it is what it is
-    the_data[valid.T] = (-1) * the_data[valid.T]
-    # the_data[~valid] = (-1) * the_data[~valid]
+    if data is not None:
+        if plot_max_value is None:
+            the_max = data.max()
+        else:
+            the_max = plot_max_value
 
-    the_ax.imshow(
-        the_data,
-        extent=img_extent,
-        origin="upper",
-        cmap=the_cmap,
-        vmin=-the_max,
-        vmax=the_max,
-        interpolation="nearest",
-    )
+        if norm is not None:
+            the_max = norm.vmax
+
+        the_data = data.copy()
+
+        # negative values are valid, positve values are invalid
+        # I know this is stupid, but it is what it is
+        the_data[valid.T] = (-1) * the_data[valid.T]
+        # the_data[~valid] = (-1) * the_data[~valid]
+
+        the_ax.imshow(
+            the_data,
+            extent=img_extent,
+            origin="upper",
+            cmap=the_cmap,
+            vmin=-the_max,
+            vmax=the_max,
+            interpolation="nearest",
+        )
 
     if with_valid:
         # plot valid tensor with true being pink and false transparent

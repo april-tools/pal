@@ -4,11 +4,11 @@ from pysmt.shortcuts import get_env
 from pysmt.fnode import FNode
 import torch
 
+from pal.logic.lra import box_to_lra
 from pal.logic.lra_pysmt import translate_to_pysmt
 from pal.distribution.constrained_distribution import (
     ConditionalConstraintedDistribution,
     ConstrainedDistributionBuilder,
-    box_to_lra,
 )
 from pal.wmi.gasp.gasp.torch.wmipa.numerical_symb_integrator_pa import (
     FunctionMode,

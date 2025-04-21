@@ -316,8 +316,8 @@ class NumericalSymbIntegratorPA(Integrator):
                 if len(results) == 0:
                     return torch.zeros([1, len(problems)]), 0
                 else:
-                    if any(r.shape[0] == 1 for r in results):
-                        print("hi")
+                    # if any(r.shape[0] == 1 for r in results):
+                    #     print("hi")
                     results = torch.concatenate(results, dim=-1)
                     return results, 0
             case WeightedFormulaMode():

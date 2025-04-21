@@ -27,7 +27,7 @@ def bisection_search(
             upper = mid
         count += 1
 
-    print(f"bisection_search took {count} iterations")
+    # print(f"bisection_search took {count} iterations")
     return (upper + lower) / 2
 
 
@@ -53,7 +53,7 @@ def conditioned_function(
     """
 
     def wrapped_function(x: torch.Tensor) -> torch.Tensor:
-        x_full = torch.cat([x, constant.unsqueeze(0)], dim=-1)
+        x_full = torch.vmap(lambda x: torch.cat([constant, x]))(x)
         return f(x_full)
 
     return wrapped_function
@@ -122,7 +122,7 @@ def inverse_transform_sampling_gasp(
             return linear_ineq_res
 
         the_constraints = constraints.map_constraints(
-            f=condition_linear_ineq, drop_vars=list(sampled_dimensions.keys())
+            f=condition_linear_ineq, #, drop_vars=list(sampled_dimensions.keys())
         )
 
         degree = get_sub_total_degree(poly, i)
@@ -137,7 +137,7 @@ def inverse_transform_sampling_gasp(
         lower, upper = limits[var]
 
         constrained_var_map_dict = {
-            var: (i - idx) for var, idx in variable_map.items() if i >= idx
+            var: (i - idx) for var, idx in variable_map.items() if idx >= i
         }
 
         integration_kwargs = {
@@ -183,7 +183,7 @@ def sample_spline_distribution(
     Sample a single point from the SplineSQ2D distribution.
     """
     assert not dist.is_batched()
-    mixture_weights = dist.mixture_weights.unsqueeze(0)
+    mixture_weights = dist.mixture_weights.squeeze(0)
     # sample the component index from the mixture weights
     component_index = torch.multinomial(mixture_weights, 1, replacement=True).item()
 
@@ -209,7 +209,7 @@ def sample_spline_distribution(
     f.to(device)
     f = f.to(precision)
 
-    return inverse_transform_sampling_gasp(
+    p = inverse_transform_sampling_gasp(
         boxed_problem,
         f,
         device=device,
@@ -217,3 +217,11 @@ def sample_spline_distribution(
         gasp_kwargs=gasp_kwargs,
         wmi_pa_mode=wmi_pa_mode,
     )
+
+    # assert that in box
+    variable_map = dist.var_positions
+    for var, idx in variable_map.items():
+        lb, ub = box.constraints[var]
+        assert lb <= p[idx] <= ub, f"Sampled point {p[idx]} is out of bounds for {var} ({lb}, {ub})"
+    
+    return p

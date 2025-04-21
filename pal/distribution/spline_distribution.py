@@ -420,7 +420,7 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
     differences: torch.Tensor  # (num_knots-1, 2) because of memory layout
     integrals_2dgrid: (
         torch.Tensor
-    )  # (b, num_mixtures, num_knots, num_knots), b=1 gets broadcasted
+    )  # (b, num_mixtures, num_knots-1, num_knots-1), b=1 gets broadcasted
     poly_params: (
         torch.Tensor
     )  # (b, num_mixtures, 2, num_knots, 4), b=1 gets broadcasted
@@ -552,6 +552,9 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
     ) -> list[tuple[lra.Box, torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]]:
         results = []
 
+        y_pos_dict = {i: name for name, i in self.var_positions.items()}
+        y_pos_dict = y_pos_dict
+
         for i in range(self.knots.shape[0] - 1):
             for j in range(self.knots.shape[0] - 1):
                 lower_x0 = self.knots[i, 0]
@@ -559,8 +562,8 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
                 lower_x1 = self.knots[j, 1]
                 upper_x1 = self.knots[j + 1, 1]
 
-                varname0 = self.y_pos_dict[0]
-                varname1 = self.y_pos_dict[1]
+                varname0 = y_pos_dict[0]
+                varname1 = y_pos_dict[1]
 
                 box = lra.Box(
                     id=(i, j),
@@ -570,7 +573,7 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
                     },
                 )
 
-                integrals = self.integrals_2dgrid[:, i, j]
+                integrals = self.integrals_2dgrid[:, :, i, j]
                 p1 = self.poly_params[:, :, 0, i]
                 p2 = self.poly_params[:, :, 1, j]
 
