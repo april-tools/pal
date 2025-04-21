@@ -5,41 +5,6 @@ from typing import TypeVar
 import pal.logic.lra as lra
 
 
-class Box:
-    def __init__(self, id: tuple[int, ...], constraints: dict[str, tuple[float, float]]):
-        self.id = id
-        self.constraints = constraints
-
-    def __repr__(self):
-        bounds_str = ", ".join(
-            f"{var}: ({lb}, {ub})" for var, (lb, ub) in self.constraints.items()
-        )
-        return f"Box(id={self.id}, constraints={bounds_str})"
-
-
-def neutral_box(vars: list[str]) -> Box:
-    """
-    Creates a box with no constraints.
-    """
-    return Box((0,), {var: (-float("inf"), float("inf")) for var in vars})
-
-
-def box_to_lra(box: Box) -> lra.LRA:
-    """
-    Converts a box to a LRA.
-    """
-    constraints = []
-    for var, (lb, ub) in box.constraints.items():
-        axis_constraints = []
-        if lb != -float("inf"):
-            axis_constraints.append(lra.LinearInequality({var: 1.0}, ">=", lb))
-        if ub != float("inf"):
-            axis_constraints.append(lra.LinearInequality({var: 1.0}, "<=", ub))
-        if axis_constraints:
-            constraints.append(lra.And(*axis_constraints))
-    return lra.And(*constraints)
-
-
 A = TypeVar("A", bound="ConditionalConstraintedDistribution")
 
 
@@ -86,7 +51,7 @@ class ConstrainedDistributionBuilder(Generic[A], ABC):
     @abstractmethod
     def enumerate_pieces(
         self,
-    ) -> list[tuple[Box, Callable[[torch.Tensor], torch.Tensor], tuple[int, ...]]]:
+    ) -> list[tuple[lra.Box, Callable[[torch.Tensor], torch.Tensor], tuple[int, ...]]]:
         """
         Enumerates the pieces of the distribution.
         Each piece is a tuple of a box, a function that maps the input to the output per
@@ -171,7 +136,7 @@ class ConstrainedDistribution(ABC, torch.nn.Module):
     @abstractmethod
     def enumerate_pieces(
         self,
-    ) -> list[tuple[Box, torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]]:
+    ) -> list[tuple[lra.Box, torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]]:
         """
         Enumerates the pieces of the distribution.
         Each piece is a tuple of a box, the integral over the box and the log_dens function.

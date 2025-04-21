@@ -3,7 +3,6 @@ import torch
 
 from pal.logic.lra_torch import PLRA, lra_to_torch
 from pal.distribution.constrained_distribution import (
-    Box,
     ConstrainedDistribution,
     ConstrainedDistributionBuilder,
     ConditionalConstraintedDistribution,
@@ -130,7 +129,7 @@ class SplineSQ2DBuilder(
 
     def enumerate_pieces(
         self,
-    ) -> list[tuple[Box, Callable[[torch.Tensor], torch.Tensor], tuple[int, ...]]]:
+    ) -> list[tuple[lra.Box, Callable[[torch.Tensor], torch.Tensor], tuple[int, ...]]]:
         results = []
 
         shape: tuple[int] = (self.squared_poly.combinations_coefficient.shape[0],)
@@ -148,7 +147,7 @@ class SplineSQ2DBuilder(
                 lower_left = torch.stack([lower_x0, lower_x1], dim=0)
                 lower_left = lower_left.to(self.knots.device)
 
-                box = Box(
+                box = lra.Box(
                     id=(i, j),
                     constraints={
                         varname0: (lower_x0.item(), upper_x0.item()),
@@ -156,12 +155,16 @@ class SplineSQ2DBuilder(
                     },
                 )
 
-                def eval_with_shift(y: torch.Tensor, shift: torch.Tensor) -> torch.Tensor:
+                def eval_with_shift(
+                    y: torch.Tensor, shift: torch.Tensor
+                ) -> torch.Tensor:
                     y_shifted = y - shift
                     return self.squared_poly.eval_tensor_vectorized(y_shifted)
 
                 # due to reuse of the scope we need to bing the shift
-                def scoped_eval(shift: torch.Tensor) -> Callable[[torch.Tensor], torch.Tensor]:
+                def scoped_eval(
+                    shift: torch.Tensor,
+                ) -> Callable[[torch.Tensor], torch.Tensor]:
                     return lambda y: eval_with_shift(y, shift)
 
                 results.append((box, scoped_eval(lower_left), shape))
@@ -305,9 +308,9 @@ class ConditionalSplineSQ2D(
     def forward(
         self,
         params_value: torch.Tensor,  # [batch_size, num_mixtures, 2, self.num_knots]
-                                     # or [num_mixtures, 2, self.num_knots]
+        # or [num_mixtures, 2, self.num_knots]
         params_derivative: torch.Tensor,  # [batch_size, num_mixtures, 2, self.num_knots]
-                                          # or [num_mixtures, 2, self.num_knots]
+        # or [num_mixtures, 2, self.num_knots]
         params_mixture_weights: torch.Tensor,  # [batch_size, num_mixtures] or [num_mixtures]
     ) -> "SplineSQ2D":
         if len(params_value.shape) == 3:
@@ -457,6 +460,12 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
         self.register_buffer("poly_params", poly_params)
         self.register_buffer("mixture_weights", mixture_weights)
 
+    def is_batched(self) -> bool:
+        """
+        Returns True if the distribution is batched, False otherwise.
+        """
+        return self.poly_params.shape[0] > 1
+
     def get_starting_coords_bin(self, x: torch.Tensor) -> torch.Tensor:
         """
         Get the starting coordinates of the bin that x is in.
@@ -497,7 +506,7 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
         # check shape
         assert x.shape[-1] == 2, "Input must be 2D"
         assert len(x.shape) == 2, "Input must be batch of 2D points"
-        
+
         start_coords, knot_idxs = self.get_bins(x)
 
         eval_point = x - start_coords
@@ -516,9 +525,7 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
             )(eval_point, knot_idxs)
         else:
             # batch of parameters
-            log_dens = torch.vmap(
-                lambda *args: calc_log_mixture(*args, eps=eps)
-            )(
+            log_dens = torch.vmap(lambda *args: calc_log_mixture(*args, eps=eps))(
                 eval_point,
                 knot_idxs,
                 self.poly_params,
@@ -528,11 +535,68 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
         if with_indicator:
             is_valid = self.torch_constraints(x)
             log_dens[~is_valid] = float("-inf")
-        
+
         return log_dens
-    
-    def enumerate_pieces(self):
-        raise NotImplementedError
+
+    def get_mixture_weights(self) -> torch.Tensor:
+        """
+        Returns the mixture weights of the distribution.
+        """
+        if self.is_batched():
+            return self.mixture_weights
+        else:
+            return self.mixture_weights[0]
+
+    def enumerate_pieces(
+        self, selected_mixture=None
+    ) -> list[tuple[lra.Box, torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]]:
+        results = []
+
+        for i in range(self.knots.shape[0] - 1):
+            for j in range(self.knots.shape[0] - 1):
+                lower_x0 = self.knots[i, 0]
+                upper_x0 = self.knots[i + 1, 0]
+                lower_x1 = self.knots[j, 1]
+                upper_x1 = self.knots[j + 1, 1]
+
+                varname0 = self.y_pos_dict[0]
+                varname1 = self.y_pos_dict[1]
+
+                box = lra.Box(
+                    id=(i, j),
+                    constraints={
+                        varname0: (lower_x0.item(), upper_x0.item()),
+                        varname1: (lower_x1.item(), upper_x1.item()),
+                    },
+                )
+
+                integrals = self.integrals_2dgrid[:, i, j]
+                p1 = self.poly_params[:, :, 0, i]
+                p2 = self.poly_params[:, :, 1, j]
+
+                def compute_integral_helper(coeff_0, coeff_1):
+                    coeffs_integral_poly = torch.cartesian_prod(coeff_0, coeff_1).prod(
+                        -1
+                    )
+                    return coeffs_integral_poly
+
+                coeffs_grid = torch.vmap(torch.vmap(compute_integral_helper))(
+                    p1, p2
+                )  # (b, num_mixture, 16)
+
+                if selected_mixture is None:
+                    raise NotImplementedError(
+                        "Not implemented for multiple mixtures yet"
+                    )
+                else:
+                    coeffs_grid = coeffs_grid[:, selected_mixture]
+                    integrals = integrals[:, selected_mixture]
+                    poly = self.poly_unsquared.square().to_applied_polynomial(
+                        coeffs_grid
+                    )
+                    results.append((box, poly, integrals))
+
+        return results
 
     def __repr__(self):
         m = self.num_mixtures

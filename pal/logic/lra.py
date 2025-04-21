@@ -6,11 +6,11 @@ class LinearInequality:
     inequality_pattern = r"(.*)(<=?|>=?)(.*)"
 
     def __init__(
-            self,
-            lhs: dict[str, float],
-            symbol: str,
-            rhs: float,
-            string_repr: str | None = None,
+        self,
+        lhs: dict[str, float],
+        symbol: str,
+        rhs: float,
+        string_repr: str | None = None,
     ):
         self.lhs = lhs
         assert symbol in ["<=", ">="]
@@ -28,6 +28,23 @@ class LinearInequality:
             LinearInequality: An empty LinearInequality instance.
         """
         return cls({}, "<=", 0.0)
+
+    def replace_variable_with_constant(
+        self, var: str, const: float
+    ) -> "LinearInequality":
+        """
+        Replaces a variable in the LinearInequality with a constant value.
+
+        Args:
+            var (str): The variable to be replaced.
+            const (float): The constant value to replace the variable with.
+
+        Returns:
+            LinearInequality: A new LinearInequality instance with the variable replaced.
+        """
+        new_lhs = {k: v for k, v in self.lhs.items() if k != var}
+        new_rhs = self.rhs - self.lhs.get(var, 0) * const
+        return LinearInequality(new_lhs, self.symbol, new_rhs)
 
     def is_empty(self) -> bool:
         """
@@ -52,7 +69,7 @@ class LinearInequality:
         """
         if self.string_repr is not None:
             return self.string_repr
-        lhs = ''
+        lhs = ""
         for var, coeff in self.lhs.items():
             pos = coeff >= 0
             if lhs == "" and pos:
@@ -138,13 +155,51 @@ def gather_variables(expr: LRA) -> set[str]:
         return set().union(*gathered_vars)
     else:
         raise ValueError(f"Unknown type {type(expr)}")
-    
+
+
+class Box:
+    def __init__(
+        self, id: tuple[int, ...], constraints: dict[str, tuple[float, float]]
+    ):
+        self.id = id
+        self.constraints = constraints
+
+    def __repr__(self):
+        bounds_str = ", ".join(
+            f"{var}: ({lb}, {ub})" for var, (lb, ub) in self.constraints.items()
+        )
+        return f"Box(id={self.id}, constraints={bounds_str})"
+
+
+def neutral_box(vars: list[str]) -> Box:
+    """
+    Creates a box with no constraints.
+    """
+    return Box((0,), {var: (-float("inf"), float("inf")) for var in vars})
+
+
+def box_to_lra(box: Box) -> LRA:
+    """
+    Converts a box to a LRA.
+    """
+    constraints = []
+    for var, (lb, ub) in box.constraints.items():
+        axis_constraints = []
+        if lb != -float("inf"):
+            axis_constraints.append(LinearInequality({var: 1.0}, ">=", lb))
+        if ub != float("inf"):
+            axis_constraints.append(LinearInequality({var: 1.0}, "<=", ub))
+        if axis_constraints:
+            constraints.append(And(*axis_constraints))
+    return And(*constraints)
+
 
 class LRAProblem:
     """
     A class representing a Linear Rational Arithmetic (LRA) problem.
     Holds additional metadata about the problem, such as the variable limits.
     """
+
     _expression: LRA
     _variables: dict[str, tuple[float, float]] | list[str]  # var_name -> (lower, upper)
     _name: str
@@ -189,7 +244,9 @@ class LRAProblem:
                 upper = LinearInequality({var: 1.0}, "<=", ub)
                 return And(lower, upper)
 
-            bounds = [to_logic(var, lb, ub) for var, (lb, ub) in self._variables.items()]
+            bounds = [
+                to_logic(var, lb, ub) for var, (lb, ub) in self._variables.items()
+            ]
 
             bound = And(*bounds)
 
@@ -200,8 +257,10 @@ class LRAProblem:
         else:
             # It's a list of variables
             return self._expression
-                
-    def map_constraints(self, f: Callable[[LinearInequality], LinearInequality]) -> "LRAProblem":
+
+    def map_constraints(
+        self, f: Callable[[LinearInequality], LinearInequality]
+    ) -> "LRAProblem":
         """
         Applies a function `f` to each `LinearConstraint` in the expression tree while keeping
         the general structure.
@@ -219,19 +278,11 @@ class LRAProblem:
             if isinstance(expr, LinearInequality):
                 return f(expr)
             elif isinstance(expr, And):
-                mapped_children = [
-                    recurse_expression(child) for child in expr.children
-                ]
-                return And(
-                    *mapped_children
-                )
+                mapped_children = [recurse_expression(child) for child in expr.children]
+                return And(*mapped_children)
             elif isinstance(expr, Or):
-                mapped_children = [
-                    recurse_expression(child) for child in expr.children
-                ]
-                return Or(
-                    *mapped_children
-                )
+                mapped_children = [recurse_expression(child) for child in expr.children]
+                return Or(*mapped_children)
 
         if self.expression is None:
             return LRAProblem(None, self._variables)
@@ -243,7 +294,7 @@ class LRAProblem:
             else:
                 sub_vars = [var for var in self._variables if var in variables]
             return LRAProblem(expr, sub_vars)
-        
+
     def get_global_limits(self) -> dict[str, tuple[float, float]]:
         """
         Returns the global limits.
@@ -257,6 +308,34 @@ class LRAProblem:
             raise ValueError(
                 "Global limits are not available when variables are provided as a list."
             )
-        
+
+    def __and__(self, other: LRA | Box):
+        if isinstance(other, LRA):
+            return LRAProblem(self.expression & other, self._variables)
+        elif isinstance(other, Box):
+            # via global bounds
+            if isinstance(self._variables, dict):
+                # merge
+                new_bounds = other.constraints
+                new_variable_dict = self._variables.copy()
+                for var, (lb, ub) in new_bounds.items():
+                    if var in new_variable_dict:
+                        old_lb, old_ub = new_variable_dict[var]
+                        new_variable_dict[var] = (max(lb, old_lb), min(ub, old_ub))
+                    else:
+                        new_variable_dict[var] = (lb, ub)
+                return LRAProblem(self.expression, new_variable_dict, self._name)
+            else:
+                # don't have bounds
+                new_variable_dict = other.constraints
+                assert len(new_variable_dict) == len(
+                    self._variables
+                ), "Number of variables in the box and the LRAProblem do not match."
+                return LRAProblem(self.expression, new_variable_dict, self._name)
+        else:
+            raise NotImplementedError(
+                f"Cannot (yet) combine LRAProblem with {type(other)}"
+            )
+
     def __repr__(self) -> str:
         return f"LRAProblem({str(self.expression)}, {self._variables})"
