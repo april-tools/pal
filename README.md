@@ -18,7 +18,7 @@ Leander Kurscheidt, Paolo Morettin, Roberto Sebastiani, Andrea Passerini, Antoni
 
 # Installation
 
-Just run:
+Just clone it and run:
 ```bash
 ./setup.sh
 ```
