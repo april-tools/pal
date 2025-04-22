@@ -21,7 +21,7 @@ def bisection_search(
     count = 0
     while upper - lower > tol:
         mid = (upper + lower) / 2
-        if f(mid) < target:
+        if f(mid) <= target:
             lower = mid
         else:
             upper = mid
