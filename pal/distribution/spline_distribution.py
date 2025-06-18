@@ -38,8 +38,8 @@ def compute_reordering_of_parameter_positions2d(
     assert powers.shape[1] == 2
     assert powers.dtype == torch.int64
     for i in range(powers.shape[0]):
-        exponent_y0 = powers[i, 0].item()
-        exponent_y1 = powers[i, 1].item()
+        exponent_y0 = int(powers[i, 0].item())
+        exponent_y1 = int(powers[i, 1].item())
         param_name = (exponent_y0, exponent_y1)
         param_start_positions[param_name] = i
 
@@ -47,7 +47,7 @@ def compute_reordering_of_parameter_positions2d(
     for resulting_param_index in range(outer_product_exponents.shape[0]):
         (exponent_y0, exponent_y1) = outer_product_exponents[resulting_param_index]
         current_param_index = param_start_positions[
-            (exponent_y0.item(), exponent_y1.item())
+            (int(exponent_y0.item()), int(exponent_y1.item()))
         ]
         param_index_map[current_param_index] = resulting_param_index
     return param_index_map
@@ -197,7 +197,7 @@ Args_forward = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
 
 
 class ConditionalSplineSQ2D(
-    ConditionalConstraintedDistribution[ConstrainedDistribution, Args_forward]
+    ConditionalConstraintedDistribution["SplineSQ2D", torch.Tensor, torch.Tensor, torch.Tensor]
 ):
     """
     A class that represents a constrained distribution P(Y|psi) on some unknown parameters psi.
@@ -383,13 +383,13 @@ class ConditionalSplineSQ2D(
             mixture_weights=params_mixture_weights,
         )
 
-    def __call__(
-        self,
-        params_value: torch.Tensor,
-        params_derivative: torch.Tensor,
-        params_mixture_weights: torch.Tensor,
-    ) -> "SplineSQ2D":
-        return super().__call__(params_value, params_derivative, params_mixture_weights)
+    # def __call__(
+    #     self,
+    #     params_value: torch.Tensor,
+    #     params_derivative: torch.Tensor,
+    #     params_mixture_weights: torch.Tensor,
+    # ) -> "SplineSQ2D":
+    #     return super().__call__(params_value, params_derivative, params_mixture_weights)
 
     def __repr__(self) -> str:
         m = self.num_mixtures
@@ -550,7 +550,7 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
     def enumerate_pieces(
         self, selected_mixture=None
     ) -> list[tuple[lra.Box, torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]]:
-        results = []
+        results: list[tuple[lra.Box, torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]] = []
 
         y_pos_dict = {i: name for name, i in self.var_positions.items()}
         y_pos_dict = y_pos_dict
@@ -597,7 +597,7 @@ class SplineSQ2D(ConstrainedDistribution, torch.nn.Module):
                     poly = self.poly_unsquared.square().to_applied_polynomial(
                         coeffs_grid
                     )
-                    results.append((box, poly, integrals))
+                    results.append((box, integrals, poly))
 
         return results
 

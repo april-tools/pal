@@ -14,6 +14,7 @@ if __name__ == "__main__":
     if module_path not in sys.path:
         sys.path.append(module_path)
 
+import os
 import pal.problem.sdd as csdd
 import pal.distribution.spline_distribution as spline
 from pal.wmi.compute_integral import integrate_distribution
@@ -65,11 +66,11 @@ class SimpleFC(Generic[T], nn.Module):
             x = self.final_function(x)
         if self.final_module is not None:
             x = self.final_module(*x)
-        return x
+        return x  # type: ignore
 
     def __call__(self, *args, **kwds) -> T:
         return super().__call__(*args, **kwds)
-    
+
 
 def create_network(
     input_size: int,
@@ -129,6 +130,7 @@ def create_network(
     if init_last_layer_positive:
         with torch.no_grad():
             last_layer = model.fcs[-1]
+            assert isinstance(last_layer, nn.Linear), "Last layer must be a Linear layer"
             pos_sub = 0.1 * torch.abs(
                 last_layer.weight.data[
                     num_mixture_param:(num_mixture_param + num_dens_knots_values)
@@ -169,7 +171,7 @@ def get_spline_model(
     # create the constraints
     lra_problem = sdd.create_constraints()
 
-    input_size = np.prod(sdd.get_x_shape())
+    input_size = int(np.prod(sdd.get_x_shape()))
 
     spline_distribution_builder = spline.SplineSQ2DBuilder(
         constraints=lra_problem,
@@ -241,8 +243,11 @@ def main(args: argparse.Namespace) -> None:
     dataset_train = dataset.train
     dataset_val = dataset.val
     dataset_test = dataset.test
+    len_train = len(dataset_train)  # type: ignore
+    len_val = len(dataset_val)  # type: ignore
+    len_test = len(dataset_test)  # type: ignore
     print(
-        f"Train size: {len(dataset_train)}, Val size: {len(dataset_val)}, Test size: {len(dataset_test)}"
+        f"Train size: {len_train}, Val size: {len_val}, Test size: {len_test}"
     )
 
     model.to(device)
@@ -408,5 +413,5 @@ def args():
 
 
 if __name__ == "__main__":
-    args = args()
-    main(args)
+    targs = args()
+    main(targs)

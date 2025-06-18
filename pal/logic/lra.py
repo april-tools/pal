@@ -90,9 +90,10 @@ class LinearInequality:
         Returns:
             AndTree: An instance of the AndTree class representing the combined constraint.
         """
+        # Only check is_empty for LinearInequality, not for And/Or
         if self.is_empty():
             return other
-        if other.is_empty():
+        if isinstance(other, LinearInequality) and other.is_empty():
             return self
         return And(self, other)
 
@@ -109,7 +110,8 @@ class LinearInequality:
         Raises:
             ValueError: If either of the LinearInequality objects is empty.
         """
-        if self.is_empty() or other.is_empty():
+        # Only check is_empty for LinearInequality, not for And/Or
+        if self.is_empty() or (isinstance(other, LinearInequality) and other.is_empty()):
             raise ValueError("Cannot combine empty LinearInequality objects using OR.")
         return Or(self, other)
 
@@ -136,6 +138,9 @@ class Or:
     def __init__(self, *children: "LRA"):
         assert len(children) > 0
         self.children = children
+
+    def __and__(self, other: "LRA"):
+        return And(self, other)
 
     def __str__(self) -> str:
         return "(" + " | ".join([str(child) for child in self.children]) + ")"
@@ -212,7 +217,7 @@ class LRAProblem:
     ):
         self._expression = expression
         if variables is None:
-            self._variables = gather_variables(expression)
+            self._variables = list(gather_variables(expression))
         else:
             self._variables = variables
             mentioned_vars = gather_variables(expression)
@@ -287,16 +292,13 @@ class LRAProblem:
                 mapped_children = [recurse_expression(child) for child in expr.children]
                 return Or(*mapped_children)
 
-        if self.expression is None:
-            return LRAProblem(None, self._variables, self._name)
+        expr = recurse_expression(self._expression)
+        variables = gather_variables(expr)
+        if isinstance(self._variables, dict):
+            sub_vars = {var: self._variables[var] for var in variables}
         else:
-            expr = recurse_expression(self._expression)
-            variables = gather_variables(expr)
-            if isinstance(self._variables, dict):
-                sub_vars = {var: self._variables[var] for var in variables}
-            else:
-                sub_vars = [var for var in self._variables if var in variables]
-            return LRAProblem(expr, sub_vars, self._name)
+            sub_vars = [var for var in self._variables if var in variables]
+        return LRAProblem(expr, sub_vars, self._name)
 
     def get_global_limits(self) -> dict[str, tuple[float, float]]:
         """
