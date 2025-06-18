@@ -1,3 +1,5 @@
+# type: ignore 
+# flake8: noqa
 old_path = "/disk/scratch/lkurscheidt/constrained-prob-ml"
 # add to sys.path
 import sys

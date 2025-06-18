@@ -16,7 +16,7 @@ def test_spline_integration_analytic_case2():
     expression = And(constraint1, constraint2, constraint3, constraint4)
 
     # Define variable bounds
-    variables = {"x": (0, 1), "y": (0, 2)}
+    variables = {"x": (0.0, 1.0), "y": (0.0, 2.0)}
 
     # Create the LRAProblem
     constraints = LRAProblem(expression=expression, variables=variables, name="Trapezoid")

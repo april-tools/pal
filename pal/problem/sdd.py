@@ -74,8 +74,8 @@ class SDDSingleImageTrajectory(ConstrainedProblem):
         image = self.dataset.get_image()
 
         bounds = {
-            "yw": (0, image.shape[1] * self.dataset.scale),
-            "yh": (0, image.shape[0] * self.dataset.scale),
+            "yw": (0.0, float(image.shape[1]) * float(self.dataset.scale)),
+            "yh": (0.0, float(image.shape[0]) * float(self.dataset.scale)),
         }
         idx_to_label = {i: name for name, i in self.get_y_vars().items()}
         lra_constraints = logic_translate_compatiblity(idx_to_label, constraints)

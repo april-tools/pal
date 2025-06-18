@@ -1,6 +1,5 @@
 from typing import Callable
 import torch
-import pysmt as smt
 
 from pal.distribution.spline_distribution import SplineSQ2D
 from pal.distribution.torch_polynomial import SquaredTorchPolynomial
@@ -60,7 +59,7 @@ def conditioned_function(
 
 
 def integrate_constrainted_cdf(
-    constraints: lra.LRA,
+    constraints: lra.LRA | lra.LRAProblem,
     f: Callable[[torch.Tensor], torch.Tensor],
     var: str,
     upper_lim: float,
@@ -122,7 +121,7 @@ def inverse_transform_sampling_gasp(
             return linear_ineq_res
 
         the_constraints = constraints.map_constraints(
-            f=condition_linear_ineq, #, drop_vars=list(sampled_dimensions.keys())
+            f=condition_linear_ineq,  # drop_vars=list(sampled_dimensions.keys())
         )
 
         degree = get_sub_total_degree(poly, i)
@@ -189,7 +188,7 @@ def sample_spline_distribution(
 
     pieces = dist.enumerate_pieces(selected_mixture=component_index)
 
-    pieces_weights = [w.item() for (_, _, w) in pieces]
+    pieces_weights = [w.item() for (_, w, _) in pieces]
     pieces_sum = sum(pieces_weights)
     pieces_weights = [w / pieces_sum for w in pieces_weights]
 
@@ -197,7 +196,7 @@ def sample_spline_distribution(
     piece_index = torch.multinomial(
         torch.tensor(pieces_weights), 1, replacement=True
     ).item()
-    (box, f, w) = pieces[piece_index]
+    (box, w, f) = pieces[int(piece_index)]
     # sample the point from the piece
 
     problem = dist.constraints

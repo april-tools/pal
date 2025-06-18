@@ -1,8 +1,8 @@
 from abc import abstractmethod, ABC
-from typing import Callable, Generic
+from typing import Callable, Generic, TypeVarTuple
 import torch
 from typing import TypeVar
-import pal.logic.lra as lra
+from pal.logic.lra import LRAProblem, Box
 
 
 A = TypeVar("A", bound="ConditionalConstraintedDistribution")
@@ -13,18 +13,23 @@ class ConstrainedDistributionBuilder(Generic[A], ABC):
     A class that represents a constrained distribution that has not been integrated yet."
     """
     _var_positions: dict[str, int]
-    _constraints: lra.LRAProblem
+    _constraints: LRAProblem
 
-    def __init__(self, var_positions: dict[str, int], constraints: lra.LRAProblem):
+    def __init__(self, var_positions: dict[str, int], constraints: LRAProblem):
         """
         Initializes the distribution with the variable positions and constraints.
         """
         self._var_positions = var_positions
         self._constraints = constraints
         # validate the var_positions
-        for var in constraints._variables.keys():
-            if var not in var_positions:
-                raise ValueError(f"Variable {var} not in var_positions")
+        if isinstance(constraints._variables, dict):
+            for var in constraints._variables.keys():
+                if var not in var_positions:
+                    raise ValueError(f"Variable {var} not in var_positions")
+        else:
+            for var in constraints._variables:
+                if var not in var_positions:
+                    raise ValueError(f"Variable {var} not in var_positions")
             
     @property
     def var_positions(self) -> dict[str, int]:
@@ -34,7 +39,7 @@ class ConstrainedDistributionBuilder(Generic[A], ABC):
         return self._var_positions
     
     @property
-    def constraints(self) -> lra.LRAProblem:
+    def constraints(self) -> LRAProblem:
         """
         Returns the constraints of the distribution.
         """
@@ -51,7 +56,7 @@ class ConstrainedDistributionBuilder(Generic[A], ABC):
     @abstractmethod
     def enumerate_pieces(
         self,
-    ) -> list[tuple[lra.Box, Callable[[torch.Tensor], torch.Tensor], tuple[int, ...]]]:
+    ) -> list[tuple[Box, Callable[[torch.Tensor], torch.Tensor], tuple[int, ...]]]:
         """
         Enumerates the pieces of the distribution.
         Each piece is a tuple of a box, a function that maps the input to the output per
@@ -69,37 +74,38 @@ class ConstrainedDistributionBuilder(Generic[A], ABC):
         """
 
 
-B = TypeVar("B", bound="ConditionalConstraintedDistribution")
-C = TypeVar("Args", bound=tuple)
+B = TypeVar("B", bound="ConstrainedDistribution")
+Args = TypeVarTuple("Args")
 
 
-class ConditionalConstraintedDistribution(Generic[B, C], ABC, torch.nn.Module):
+class ConditionalConstraintedDistribution(Generic[B, *Args], ABC, torch.nn.Module):
     """
     A class that represents a constrained distribution P(Y|psi) on some unknown parameters psi.
     """
-    _constraints: lra.LRAProblem
+    _constraints: LRAProblem
 
-    def __init__(self, constraints: lra.LRAProblem):
+    def __init__(self, constraints: LRAProblem):
         """
         Initializes the distribution with the constraints.
         """
         self._constraints = constraints
 
     @property
-    def constraints(self) -> lra.LRAProblem:
+    def constraints(self) -> LRAProblem:
         """
         Returns the constraints of the distribution.
         """
         return self._constraints
 
     @abstractmethod
-    def forward(self, *psi: C) -> B:
+    def forward(self, *args: *Args) -> B:
         """
         Returns the distribution by giving the parameters psi.
         """
 
-    def __call__(self, *psi: C) -> B:
-        return super().__call__(*psi)
+    def __call__(self, *args: *Args) -> B:
+        # return super().__call__(*psi)
+        return self.forward(*args)
 
     @abstractmethod
     def parameter_shape(self) -> list[tuple[int, ...]]:
@@ -112,16 +118,16 @@ class ConstrainedDistribution(ABC, torch.nn.Module):
     """
     A class that represents a constrained distribution P(Y) over some constraints phi.
     """
-    _constraints: lra.LRAProblem
+    _constraints: LRAProblem
 
-    def __init__(self, constraints: lra.LRAProblem):
+    def __init__(self, constraints: LRAProblem):
         """
         Initializes the distribution with the constraints.
         """
         self._constraints = constraints
 
     @property
-    def constraints(self) -> lra.LRAProblem:
+    def constraints(self) -> LRAProblem:
         """
         Returns the constraints of the distribution.
         """
@@ -136,7 +142,7 @@ class ConstrainedDistribution(ABC, torch.nn.Module):
     @abstractmethod
     def enumerate_pieces(
         self,
-    ) -> list[tuple[lra.Box, torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]]:
+    ) -> list[tuple[Box, torch.Tensor, Callable[[torch.Tensor], torch.Tensor]]]:
         """
         Enumerates the pieces of the distribution.
         Each piece is a tuple of a box, the integral over the box and the log_dens function.

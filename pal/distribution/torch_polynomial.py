@@ -26,7 +26,7 @@ def generate_monomial(
 def hash_torch_tensor(tensor: torch.Tensor) -> int:
     np_tensor = tensor.detach().cpu().numpy()
     np_tensor = np.ascontiguousarray(np_tensor)
-    dig = sha1(np_tensor).digest()
+    dig = sha1(np_tensor.tobytes()).digest()
     return int.from_bytes(dig, byteorder="big")
 
 
